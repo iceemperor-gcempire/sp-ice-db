@@ -22,6 +22,13 @@ sp-ice-db is a macOS application project for managing image source paths, prepar
 
 The core domain logic starts as a Swift Package so it can be developed with fast unit tests before the native macOS UI is added.
 
+GitHub issues are the source of record for project work:
+
+- Create a GitHub issue before starting any new non-trivial task or investigation.
+- If the work is small and directly related to the active task, add it to the existing issue instead of creating a separate one.
+- Keep implementation notes, decisions, and follow-up work linked to the relevant issue.
+- Continue using TDD for production behavior changes.
+
 Run tests:
 
 ```sh
