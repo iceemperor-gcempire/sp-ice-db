@@ -35,6 +35,12 @@ Run tests:
 swift test
 ```
 
+Run the macOS app shell:
+
+```sh
+swift run sp-ice-db
+```
+
 Development should follow a TDD loop:
 
 1. Add or update a focused test that describes the behavior.

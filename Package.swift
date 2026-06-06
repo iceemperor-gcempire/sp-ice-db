@@ -11,16 +11,35 @@ let package = Package(
         .library(
             name: "SpIceDBCore",
             targets: ["SpIceDBCore"]
+        ),
+        .library(
+            name: "SpIceDBAppModel",
+            targets: ["SpIceDBAppModel"]
+        ),
+        .executable(
+            name: "sp-ice-db",
+            targets: ["SpIceDBApp"]
         )
     ],
     targets: [
         .target(
             name: "SpIceDBCore"
         ),
+        .target(
+            name: "SpIceDBAppModel",
+            dependencies: ["SpIceDBCore"]
+        ),
+        .executableTarget(
+            name: "SpIceDBApp",
+            dependencies: ["SpIceDBCore", "SpIceDBAppModel"]
+        ),
         .testTarget(
             name: "SpIceDBCoreTests",
             dependencies: ["SpIceDBCore"]
+        ),
+        .testTarget(
+            name: "SpIceDBAppModelTests",
+            dependencies: ["SpIceDBAppModel", "SpIceDBCore"]
         )
     ]
 )
-
