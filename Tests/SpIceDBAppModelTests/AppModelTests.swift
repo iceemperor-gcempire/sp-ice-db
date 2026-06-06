@@ -73,7 +73,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.selectedImageStatus)
     }
 
-    func testRemoveSelectedImageRemovesEntrySelectsNextAvailableImageAndMarksUnsavedChanges() {
+    func testRemoveSelectedImageOnlyUnregistersEntrySelectsNextAvailableImageAndMarksUnsavedChanges() {
         let firstID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let secondID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
         let model = AppModel(

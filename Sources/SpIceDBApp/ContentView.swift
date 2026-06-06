@@ -57,7 +57,7 @@ struct ContentView: View {
                 Button {
                     removeSelectedImage()
                 } label: {
-                    Label("Remove Image", systemImage: "trash")
+                    Label("Remove From Workspace", systemImage: "minus.circle")
                 }
                 .disabled(model.selectedImageID == nil)
             }
@@ -178,7 +178,7 @@ struct ContentView: View {
                 Button(role: .destructive) {
                     removeSelectedImage()
                 } label: {
-                    Label("Remove Image", systemImage: "trash")
+                    Label("Remove From Workspace", systemImage: "minus.circle")
                 }
             }
         }

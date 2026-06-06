@@ -19,7 +19,7 @@ struct SpIceDBApp: App {
             }
 
             CommandMenu("Image") {
-                Button("Remove Selected Image") {
+                Button("Remove Selected Image From Workspace") {
                     model.removeSelectedImage()
                 }
                 .keyboardShortcut(.delete)
