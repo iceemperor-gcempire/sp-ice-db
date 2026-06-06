@@ -59,6 +59,27 @@ public final class AppModel {
         hasUnsavedChanges = false
     }
 
+    public func updateWorkspaceName(_ name: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, trimmedName != workspace.workspace.name else {
+            return
+        }
+
+        workspace.workspace.name = trimmedName
+        hasUnsavedChanges = true
+    }
+
+    public func setWorkingDirectory(_ path: String?) {
+        let trimmedPath = path?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let workingDirectory = trimmedPath.isEmpty ? nil : trimmedPath
+        guard workingDirectory != workspace.workspace.workingDirectory else {
+            return
+        }
+
+        workspace.workspace.workingDirectory = workingDirectory
+        hasUnsavedChanges = true
+    }
+
     @discardableResult
     public func addImage(path: String) throws -> ImageEntry {
         let imageCount = workspace.images.count

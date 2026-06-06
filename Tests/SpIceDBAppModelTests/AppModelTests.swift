@@ -14,6 +14,51 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testUpdateWorkspaceNameTrimsNameAndMarksUnsavedChanges() {
+        let model = AppModel()
+
+        model.updateWorkspaceName("  Dataset A  ")
+
+        XCTAssertEqual(model.workspace.workspace.name, "Dataset A")
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testUpdateWorkspaceNameIgnoresBlankNamesAndEquivalentNames() {
+        let model = AppModel(
+            workspace: workspaceInfo(name: "Dataset A"),
+            hasUnsavedChanges: false
+        )
+
+        model.updateWorkspaceName("   ")
+        model.updateWorkspaceName(" Dataset A ")
+
+        XCTAssertEqual(model.workspace.workspace.name, "Dataset A")
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testSetWorkingDirectoryTrimsPathAndMarksUnsavedChanges() {
+        let model = AppModel()
+
+        model.setWorkingDirectory("  /tmp/generated  ")
+
+        XCTAssertEqual(model.workspace.workspace.workingDirectory, "/tmp/generated")
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testSetWorkingDirectoryClearsBlankPathAndDoesNotMarkEquivalentValueDirty() {
+        let model = AppModel(
+            workspace: workspaceInfo(name: "Dataset", workingDirectory: "/tmp/generated"),
+            hasUnsavedChanges: false
+        )
+
+        model.setWorkingDirectory(" /tmp/generated ")
+        XCTAssertFalse(model.hasUnsavedChanges)
+
+        model.setWorkingDirectory("   ")
+        XCTAssertNil(model.workspace.workspace.workingDirectory)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
     func testAddImageSelectsNewEntryAndMarksUnsavedChanges() throws {
         let ids = DeterministicUUIDGenerator([
             UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
@@ -246,6 +291,18 @@ private func workspaceWithImage(id: UUID) -> WorkspaceDocument {
     workspaceWithImages([
         imageEntry(id: id, filename: "image001.png")
     ])
+}
+
+private func workspaceInfo(name: String, workingDirectory: String? = nil) -> WorkspaceDocument {
+    WorkspaceDocument(
+        workspace: WorkspaceInfo(
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            name: name,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            workingDirectory: workingDirectory
+        )
+    )
 }
 
 private func workspaceWithImages(_ images: [ImageEntry]) -> WorkspaceDocument {
