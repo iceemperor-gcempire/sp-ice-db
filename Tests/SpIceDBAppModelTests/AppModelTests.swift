@@ -105,6 +105,54 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.workspace.images.map(\.id), [imageID])
         XCTAssertFalse(model.hasUnsavedChanges)
     }
+
+    func testSaveWorkspaceWritesFileStoresURLAndClearsUnsavedChanges() throws {
+        let directory = try TemporaryDirectory()
+        let fileURL = directory.url.appendingPathComponent("dataset.spicedb")
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_500)
+        let model = AppModel(
+            workspace: workspaceWithImage(id: imageID),
+            selectedImageID: imageID,
+            hasUnsavedChanges: true,
+            now: { savedAt }
+        )
+
+        try model.saveWorkspace(to: fileURL)
+
+        XCTAssertEqual(model.workspaceURL, fileURL)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(model.workspace.workspace.updatedAt, savedAt)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
+    func testOpenWorkspaceLoadsDocumentSelectsFirstImageAndClearsUnsavedChanges() throws {
+        let directory = try TemporaryDirectory()
+        let fileURL = directory.url.appendingPathComponent("dataset.spicedb")
+        let firstID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let secondID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        var document = workspaceWithImages([
+            imageEntry(id: firstID, filename: "image001.png"),
+            imageEntry(id: secondID, filename: "image002.png")
+        ])
+        try WorkspaceStore(now: { Date(timeIntervalSince1970: 1_800_000_100) }).save(&document, to: fileURL)
+        let model = AppModel(hasUnsavedChanges: true)
+
+        try model.openWorkspace(from: fileURL)
+
+        XCTAssertEqual(model.workspace.images.map(\.id), [firstID, secondID])
+        XCTAssertEqual(model.workspaceURL, fileURL)
+        XCTAssertEqual(model.selectedImageID, firstID)
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testSaveWorkspaceWithoutURLThrows() {
+        let model = AppModel()
+
+        XCTAssertThrowsError(try model.saveWorkspace()) { error in
+            XCTAssertEqual(error as? AppModelError, .workspaceURLRequired)
+        }
+    }
 }
 
 private final class DeterministicUUIDGenerator {
@@ -151,5 +199,19 @@ private struct StubFileStatusProvider: ImageFileStatusProviding {
 
     func status(forPath path: String) -> ImageFileStatus {
         statuses[path] ?? .missing
+    }
+}
+
+private final class TemporaryDirectory {
+    let url: URL
+
+    init() throws {
+        url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sp-ice-db-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: url)
     }
 }
