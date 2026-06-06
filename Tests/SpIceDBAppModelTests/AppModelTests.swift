@@ -92,6 +92,31 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.hasUnsavedChanges)
     }
 
+    func testEditingSelectedImageWithEquivalentUserClassificationDoesNotMarkUnsavedChanges() throws {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let model = AppModel(
+            workspace: workspaceWithImages([
+                imageEntry(
+                    id: imageID,
+                    filename: "image001.png",
+                    classification: Classification(
+                        user: ClassificationContent(
+                            sentence: "A clean portrait.",
+                            tags: ["portrait", "clean"]
+                        )
+                    )
+                )
+            ]),
+            selectedImageID: imageID,
+            hasUnsavedChanges: false
+        )
+
+        try model.updateSelectedUserSentence("  A clean portrait.  ")
+        try model.updateSelectedUserTags("portrait, clean")
+
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
     func testSelectedImageReturnsCurrentImageEntry() {
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let model = AppModel(
@@ -236,11 +261,16 @@ private func workspaceWithImages(_ images: [ImageEntry]) -> WorkspaceDocument {
     )
 }
 
-private func imageEntry(id: UUID, filename: String) -> ImageEntry {
+private func imageEntry(
+    id: UUID,
+    filename: String,
+    classification: Classification = Classification()
+) -> ImageEntry {
     ImageEntry(
         id: id,
         sourcePath: "/tmp/source/\(filename)",
-        displayName: filename
+        displayName: filename,
+        classification: classification
     )
 }
 

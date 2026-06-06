@@ -98,14 +98,20 @@ public final class AppModel {
 
     public func updateSelectedUserSentence(_ sentence: String) throws {
         let imageID = try requireSelectedImageID()
+        let previous = selectedImage?.classification.user
         try classificationLibrary.updateUserSentence(sentence, forImageID: imageID, in: &workspace)
-        hasUnsavedChanges = true
+        if selectedImage?.classification.user != previous {
+            hasUnsavedChanges = true
+        }
     }
 
     public func updateSelectedUserTags(_ tags: String) throws {
         let imageID = try requireSelectedImageID()
+        let previous = selectedImage?.classification.user
         try classificationLibrary.updateUserTags(tags, forImageID: imageID, in: &workspace)
-        hasUnsavedChanges = true
+        if selectedImage?.classification.user != previous {
+            hasUnsavedChanges = true
+        }
     }
 
     public func openWorkspace(from url: URL) throws {
