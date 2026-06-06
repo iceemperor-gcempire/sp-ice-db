@@ -67,14 +67,19 @@ public final class AppModel {
         return entry
     }
 
-    public func removeSelectedImage() {
+    @discardableResult
+    public func removeSelectedImage() -> ImageEntry? {
         guard let selectedImageID else {
-            return
+            return nil
         }
 
-        _ = imageLibrary.removeImage(id: selectedImageID, from: &workspace)
+        guard let removed = imageLibrary.removeImage(id: selectedImageID, from: &workspace) else {
+            return nil
+        }
+
         self.selectedImageID = workspace.images.first?.id
         hasUnsavedChanges = true
+        return removed
     }
 
     public func updateSelectedUserSentence(_ sentence: String) throws {

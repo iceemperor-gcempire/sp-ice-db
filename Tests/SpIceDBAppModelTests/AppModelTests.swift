@@ -72,6 +72,39 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertNil(model.selectedImageStatus)
     }
+
+    func testRemoveSelectedImageRemovesEntrySelectsNextAvailableImageAndMarksUnsavedChanges() {
+        let firstID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let secondID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let model = AppModel(
+            workspace: workspaceWithImages([
+                imageEntry(id: firstID, filename: "image001.png"),
+                imageEntry(id: secondID, filename: "image002.png")
+            ]),
+            selectedImageID: firstID
+        )
+
+        let removed = model.removeSelectedImage()
+
+        XCTAssertEqual(removed?.id, firstID)
+        XCTAssertEqual(model.workspace.images.map(\.id), [secondID])
+        XCTAssertEqual(model.selectedImageID, secondID)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testRemoveSelectedImageDoesNotMarkUnsavedChangesWhenNothingIsSelected() {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let model = AppModel(
+            workspace: workspaceWithImage(id: imageID),
+            hasUnsavedChanges: false
+        )
+
+        let removed = model.removeSelectedImage()
+
+        XCTAssertNil(removed)
+        XCTAssertEqual(model.workspace.images.map(\.id), [imageID])
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
 }
 
 private final class DeterministicUUIDGenerator {
@@ -87,6 +120,12 @@ private final class DeterministicUUIDGenerator {
 }
 
 private func workspaceWithImage(id: UUID) -> WorkspaceDocument {
+    workspaceWithImages([
+        imageEntry(id: id, filename: "image001.png")
+    ])
+}
+
+private func workspaceWithImages(_ images: [ImageEntry]) -> WorkspaceDocument {
     WorkspaceDocument(
         workspace: WorkspaceInfo(
             id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
@@ -95,13 +134,15 @@ private func workspaceWithImage(id: UUID) -> WorkspaceDocument {
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000),
             workingDirectory: nil
         ),
-        images: [
-            ImageEntry(
-                id: id,
-                sourcePath: "/tmp/source/image001.png",
-                displayName: "image001.png"
-            )
-        ]
+        images: images
+    )
+}
+
+private func imageEntry(id: UUID, filename: String) -> ImageEntry {
+    ImageEntry(
+        id: id,
+        sourcePath: "/tmp/source/\(filename)",
+        displayName: filename
     )
 }
 

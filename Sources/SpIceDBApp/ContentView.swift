@@ -53,6 +53,13 @@ struct ContentView: View {
                 } label: {
                     Label("Choose Image", systemImage: "photo")
                 }
+
+                Button {
+                    removeSelectedImage()
+                } label: {
+                    Label("Remove Image", systemImage: "trash")
+                }
+                .disabled(model.selectedImageID == nil)
             }
         }
         .onChange(of: model.selectedImageID) {
@@ -166,6 +173,14 @@ struct ContentView: View {
                     }
                 }
             }
+
+            Section {
+                Button(role: .destructive) {
+                    removeSelectedImage()
+                } label: {
+                    Label("Remove Image", systemImage: "trash")
+                }
+            }
         }
     }
 
@@ -229,6 +244,11 @@ struct ContentView: View {
         } catch {
             errorMessage = String(describing: error)
         }
+    }
+
+    private func removeSelectedImage() {
+        _ = model.removeSelectedImage()
+        syncEditorFields()
     }
 
     private func openWorkspace() {

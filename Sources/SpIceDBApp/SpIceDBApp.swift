@@ -17,7 +17,14 @@ struct SpIceDBApp: App {
                 }
                 .keyboardShortcut("n")
             }
+
+            CommandMenu("Image") {
+                Button("Remove Selected Image") {
+                    model.removeSelectedImage()
+                }
+                .keyboardShortcut(.delete)
+                .disabled(model.selectedImageID == nil)
+            }
         }
     }
 }
-
