@@ -49,7 +49,24 @@ public final class AppModel {
             return nil
         }
 
-        return imageLibrary.status(for: selectedImage)
+        return imageStatus(for: selectedImage)
+    }
+
+    public var imageStatusSummary: ImageStatusSummary {
+        workspace.images.reduce(into: ImageStatusSummary()) { summary, image in
+            switch imageStatus(for: image) {
+            case .readable:
+                summary.readable += 1
+            case .missing:
+                summary.missing += 1
+            case .unreadable:
+                summary.unreadable += 1
+            }
+        }
+    }
+
+    public func imageStatus(for image: ImageEntry) -> ImageFileStatus {
+        imageLibrary.status(for: image)
     }
 
     public func newWorkspace(named name: String = "Untitled") {
@@ -184,4 +201,16 @@ public final class AppModel {
 public enum AppModelError: Error, Equatable {
     case imageSelectionRequired
     case workspaceURLRequired
+}
+
+public struct ImageStatusSummary: Equatable {
+    public var readable: Int
+    public var missing: Int
+    public var unreadable: Int
+
+    public init(readable: Int = 0, missing: Int = 0, unreadable: Int = 0) {
+        self.readable = readable
+        self.missing = missing
+        self.unreadable = unreadable
+    }
 }

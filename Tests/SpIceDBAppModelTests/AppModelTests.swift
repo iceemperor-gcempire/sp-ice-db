@@ -222,6 +222,49 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.selectedImageStatus)
     }
 
+    func testImageStatusForEntryUsesInjectedProvider() {
+        let image = imageEntry(
+            id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
+            filename: "image001.png"
+        )
+        let model = AppModel(
+            workspace: workspaceWithImages([image]),
+            imageFileStatusProvider: StubFileStatusProvider(statuses: [
+                image.sourcePath: .unreadable
+            ])
+        )
+
+        XCTAssertEqual(model.imageStatus(for: image), .unreadable)
+    }
+
+    func testImageStatusSummaryCountsAllWorkspaceImages() {
+        let readable = imageEntry(
+            id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
+            filename: "readable.png"
+        )
+        let missing = imageEntry(
+            id: UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!,
+            filename: "missing.png"
+        )
+        let unreadable = imageEntry(
+            id: UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!,
+            filename: "unreadable.png"
+        )
+        let model = AppModel(
+            workspace: workspaceWithImages([readable, missing, unreadable]),
+            imageFileStatusProvider: StubFileStatusProvider(statuses: [
+                readable.sourcePath: .readable,
+                missing.sourcePath: .missing,
+                unreadable.sourcePath: .unreadable
+            ])
+        )
+
+        XCTAssertEqual(
+            model.imageStatusSummary,
+            ImageStatusSummary(readable: 1, missing: 1, unreadable: 1)
+        )
+    }
+
     func testRemoveSelectedImageOnlyUnregistersEntrySelectsNextAvailableImageAndMarksUnsavedChanges() {
         let firstID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let secondID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!

@@ -138,20 +138,45 @@ struct ContentView: View {
             .padding(.horizontal)
             .padding(.bottom, 8)
 
+            imageStatusSummary
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
             List(selection: $model.selectedImageID) {
                 ForEach(model.workspace.images, id: \.id) { image in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(image.displayName ?? image.sourcePath)
-                            .lineLimit(1)
-                        Text(image.sourcePath)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                    HStack(spacing: 8) {
+                        Image(systemName: imageStatusSystemImage(for: model.imageStatus(for: image)))
+                            .foregroundStyle(imageStatusColor(for: model.imageStatus(for: image)))
+                            .frame(width: 16)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(image.displayName ?? image.sourcePath)
+                                .lineLimit(1)
+                            Text(image.sourcePath)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
                     .tag(image.id)
                 }
             }
         }
+    }
+
+    private var imageStatusSummary: some View {
+        let summary = model.imageStatusSummary
+
+        return HStack(spacing: 10) {
+            Label("\(summary.readable)", systemImage: "checkmark.circle")
+                .foregroundStyle(.green)
+            Label("\(summary.missing)", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+            Label("\(summary.unreadable)", systemImage: "lock")
+                .foregroundStyle(.red)
+            Spacer()
+        }
+        .font(.caption)
     }
 
     private var detail: some View {
@@ -437,6 +462,28 @@ struct ContentView: View {
             "lock"
         case nil:
             "photo.on.rectangle"
+        }
+    }
+
+    private func imageStatusSystemImage(for status: ImageFileStatus) -> String {
+        switch status {
+        case .readable:
+            "checkmark.circle"
+        case .missing:
+            "exclamationmark.triangle"
+        case .unreadable:
+            "lock"
+        }
+    }
+
+    private func imageStatusColor(for status: ImageFileStatus) -> Color {
+        switch status {
+        case .readable:
+            .green
+        case .missing:
+            .orange
+        case .unreadable:
+            .red
         }
     }
 }
