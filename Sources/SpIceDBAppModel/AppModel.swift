@@ -20,13 +20,17 @@ public final class AppModel {
         workspaceURL: URL? = nil,
         hasUnsavedChanges: Bool = false,
         idGenerator: @escaping () -> UUID = UUID.init,
+        imageFileStatusProvider: ImageFileStatusProviding = FileManagerImageFileStatusProvider(),
         now: @escaping () -> Date = Date.init
     ) {
         self.workspace = workspace
         self.selectedImageID = selectedImageID
         self.workspaceURL = workspaceURL
         self.hasUnsavedChanges = hasUnsavedChanges
-        self.imageLibrary = ImageLibrary(idGenerator: idGenerator)
+        self.imageLibrary = ImageLibrary(
+            idGenerator: idGenerator,
+            fileStatusProvider: imageFileStatusProvider
+        )
         self.classificationLibrary = ClassificationLibrary()
         self.workspaceStore = WorkspaceStore(now: now)
         self.now = now
@@ -38,6 +42,14 @@ public final class AppModel {
         }
 
         return workspace.images.first(where: { $0.id == selectedImageID })
+    }
+
+    public var selectedImageStatus: ImageFileStatus? {
+        guard let selectedImage else {
+            return nil
+        }
+
+        return imageLibrary.status(for: selectedImage)
     }
 
     public func newWorkspace(named name: String = "Untitled") {
@@ -112,4 +124,3 @@ public enum AppModelError: Error, Equatable {
     case imageSelectionRequired
     case workspaceURLRequired
 }
-

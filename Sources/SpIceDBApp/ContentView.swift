@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var errorMessage: String?
 
     private let workspaceContentType = UTType(filenameExtension: "spicedb") ?? .json
+    private let imageContentTypes: [UTType] = [.image]
 
     var body: some View {
         NavigationSplitView {
@@ -45,6 +46,12 @@ struct ContentView: View {
                     addImage()
                 } label: {
                     Label("Add Image", systemImage: "photo.badge.plus")
+                }
+
+                Button {
+                    chooseImageFile()
+                } label: {
+                    Label("Choose Image", systemImage: "photo")
                 }
             }
         }
@@ -123,14 +130,22 @@ struct ContentView: View {
                 Label("Add", systemImage: "plus")
             }
             .disabled(imagePathInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button {
+                chooseImageFile()
+            } label: {
+                Label("Choose", systemImage: "folder")
+            }
         }
     }
 
     private func metadataEditor(for image: ImageEntry) -> some View {
         Form {
             Section("Image") {
+                imagePreview(for: image)
                 LabeledContent("Name", value: image.displayName ?? "")
                 LabeledContent("Path", value: image.sourcePath)
+                LabeledContent("Status", value: selectedImageStatusText)
             }
 
             Section("User Classification") {
@@ -154,6 +169,25 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private func imagePreview(for image: ImageEntry) -> some View {
+        if model.selectedImageStatus == .readable,
+           let nsImage = NSImage(contentsOfFile: image.sourcePath) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 320)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        } else {
+            ContentUnavailableView(
+                selectedImageStatusText,
+                systemImage: selectedImageStatusSystemImage
+            )
+            .frame(maxWidth: .infinity, minHeight: 180)
+        }
+    }
+
     private var errorPresented: Binding<Bool> {
         Binding(
             get: { errorMessage != nil },
@@ -169,6 +203,28 @@ struct ContentView: View {
         do {
             try model.addImage(path: imagePathInput)
             imagePathInput = ""
+            syncEditorFields()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    private func chooseImageFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = imageContentTypes
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose image files to add to the workspace."
+
+        guard panel.runModal() == .OK else {
+            return
+        }
+
+        do {
+            for url in panel.urls {
+                try model.addImage(path: url.path)
+            }
             syncEditorFields()
         } catch {
             errorMessage = String(describing: error)
@@ -246,5 +302,31 @@ struct ContentView: View {
     private func syncEditorFields() {
         userSentence = model.selectedImage?.classification.user.sentence ?? ""
         userTags = model.selectedImage?.classification.user.tags.joined(separator: ", ") ?? ""
+    }
+
+    private var selectedImageStatusText: String {
+        switch model.selectedImageStatus {
+        case .readable:
+            "Readable"
+        case .missing:
+            "Missing File"
+        case .unreadable:
+            "Unreadable File"
+        case nil:
+            "No Image Selected"
+        }
+    }
+
+    private var selectedImageStatusSystemImage: String {
+        switch model.selectedImageStatus {
+        case .readable:
+            "photo"
+        case .missing:
+            "exclamationmark.triangle"
+        case .unreadable:
+            "lock"
+        case nil:
+            "photo.on.rectangle"
+        }
     }
 }

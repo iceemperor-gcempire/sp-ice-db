@@ -51,6 +51,27 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(model.selectedImage?.id, imageID)
     }
+
+    func testSelectedImageStatusUsesInjectedProvider() {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let model = AppModel(
+            workspace: workspaceWithImage(id: imageID),
+            selectedImageID: imageID,
+            imageFileStatusProvider: StubFileStatusProvider(statuses: [
+                "/tmp/source/image001.png": .missing
+            ])
+        )
+
+        XCTAssertEqual(model.selectedImageStatus, .missing)
+    }
+
+    func testSelectedImageStatusIsNilWhenNoImageIsSelected() {
+        let model = AppModel(
+            workspace: workspaceWithImage(id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!)
+        )
+
+        XCTAssertNil(model.selectedImageStatus)
+    }
 }
 
 private final class DeterministicUUIDGenerator {
@@ -84,3 +105,10 @@ private func workspaceWithImage(id: UUID) -> WorkspaceDocument {
     )
 }
 
+private struct StubFileStatusProvider: ImageFileStatusProviding {
+    var statuses: [String: ImageFileStatus]
+
+    func status(forPath path: String) -> ImageFileStatus {
+        statuses[path] ?? .missing
+    }
+}
