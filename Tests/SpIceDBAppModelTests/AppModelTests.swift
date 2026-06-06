@@ -27,6 +27,56 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.hasUnsavedChanges)
     }
 
+    func testAddingDuplicateImageSelectsExistingEntryWithoutMarkingUnsavedChanges() throws {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let model = AppModel(
+            workspace: workspaceWithImage(id: imageID),
+            hasUnsavedChanges: false
+        )
+
+        let entry = try model.addImage(path: "/tmp/source/image001.png")
+
+        XCTAssertEqual(entry.id, imageID)
+        XCTAssertEqual(model.workspace.images.map(\.id), [imageID])
+        XCTAssertEqual(model.selectedImageID, imageID)
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testAddImagesAddsMultiplePathsSelectsLastEntryAndMarksUnsavedChanges() throws {
+        let ids = DeterministicUUIDGenerator([
+            UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
+            UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        ])
+        let model = AppModel(idGenerator: ids.next)
+
+        let entries = try model.addImages(paths: [
+            "/tmp/source/image001.png",
+            "/tmp/source/image002.png"
+        ])
+
+        XCTAssertEqual(entries.map(\.sourcePath), ["/tmp/source/image001.png", "/tmp/source/image002.png"])
+        XCTAssertEqual(model.workspace.images.map(\.sourcePath), ["/tmp/source/image001.png", "/tmp/source/image002.png"])
+        XCTAssertEqual(model.selectedImageID, entries.last?.id)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testAddImagesIgnoresDuplicatePathsWithoutExtraEntries() throws {
+        let ids = DeterministicUUIDGenerator([
+            UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        ])
+        let model = AppModel(idGenerator: ids.next)
+
+        let entries = try model.addImages(paths: [
+            "/tmp/source/image001.png",
+            "/tmp/source/image001.png"
+        ])
+
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(entries[0], entries[1])
+        XCTAssertEqual(model.workspace.images.count, 1)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
     func testEditingSelectedImageUpdatesUserClassification() throws {
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let model = AppModel(

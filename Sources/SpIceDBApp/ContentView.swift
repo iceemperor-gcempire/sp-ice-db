@@ -237,9 +237,7 @@ struct ContentView: View {
         }
 
         do {
-            for url in panel.urls {
-                try model.addImage(path: url.path)
-            }
+            try model.addImages(paths: panel.urls.map(\.path))
             syncEditorFields()
         } catch {
             errorMessage = String(describing: error)

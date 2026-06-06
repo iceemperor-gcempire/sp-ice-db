@@ -61,10 +61,24 @@ public final class AppModel {
 
     @discardableResult
     public func addImage(path: String) throws -> ImageEntry {
+        let imageCount = workspace.images.count
         let entry = try imageLibrary.addImage(path: path, to: &workspace)
         selectedImageID = entry.id
-        hasUnsavedChanges = true
+        if workspace.images.count != imageCount {
+            hasUnsavedChanges = true
+        }
         return entry
+    }
+
+    @discardableResult
+    public func addImages(paths: [String]) throws -> [ImageEntry] {
+        var entries: [ImageEntry] = []
+
+        for path in paths {
+            entries.append(try addImage(path: path))
+        }
+
+        return entries
     }
 
     @discardableResult
