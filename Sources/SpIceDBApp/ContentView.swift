@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var workspaceNameInput = ""
     @State private var userSentence = ""
     @State private var userTags = ""
+    @State private var imageNotes = ""
     @State private var errorMessage: String?
 
     private let workspaceContentType = UTType(filenameExtension: "spicedb") ?? .json
@@ -198,6 +199,14 @@ struct ContentView: View {
                 LabeledContent("Name", value: image.displayName ?? "")
                 LabeledContent("Path", value: image.sourcePath)
                 LabeledContent("Status", value: selectedImageStatusText)
+
+                TextField("Notes", text: $imageNotes, axis: .vertical)
+                    .lineLimit(2...5)
+                    .onSubmit(saveImageNotes)
+
+                Button("Save Notes") {
+                    saveImageNotes()
+                }
             }
 
             Section("User Classification") {
@@ -368,6 +377,15 @@ struct ContentView: View {
         syncWorkspaceFields()
     }
 
+    private func saveImageNotes() {
+        do {
+            try model.updateSelectedImageNotes(imageNotes)
+            syncEditorFields()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
     private func saveUserSentence() {
         do {
             try model.updateSelectedUserSentence(userSentence)
@@ -387,6 +405,7 @@ struct ContentView: View {
     }
 
     private func syncEditorFields() {
+        imageNotes = model.selectedImage?.notes ?? ""
         userSentence = model.selectedImage?.classification.user.sentence ?? ""
         userTags = model.selectedImage?.classification.user.tags.joined(separator: ", ") ?? ""
     }

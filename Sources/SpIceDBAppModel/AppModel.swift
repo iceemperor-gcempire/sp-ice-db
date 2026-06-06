@@ -135,6 +135,21 @@ public final class AppModel {
         }
     }
 
+    public func updateSelectedImageNotes(_ notes: String) throws {
+        let imageID = try requireSelectedImageID()
+        guard let index = workspace.images.firstIndex(where: { $0.id == imageID }) else {
+            throw AppModelError.imageSelectionRequired
+        }
+
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard workspace.images[index].notes != trimmedNotes else {
+            return
+        }
+
+        workspace.images[index].notes = trimmedNotes
+        hasUnsavedChanges = true
+    }
+
     public func openWorkspace(from url: URL) throws {
         workspace = try workspaceStore.load(from: url)
         workspaceURL = url

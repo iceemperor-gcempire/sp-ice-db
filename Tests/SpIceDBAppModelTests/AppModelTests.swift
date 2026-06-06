@@ -162,6 +162,35 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testUpdateSelectedImageNotesTrimsNotesAndMarksUnsavedChanges() throws {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let model = AppModel(
+            workspace: workspaceWithImage(id: imageID),
+            selectedImageID: imageID
+        )
+
+        try model.updateSelectedImageNotes("  keep for review  ")
+
+        XCTAssertEqual(model.workspace.images[0].notes, "keep for review")
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testUpdateSelectedImageNotesDoesNotMarkEquivalentNotesDirty() throws {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let model = AppModel(
+            workspace: workspaceWithImages([
+                imageEntry(id: imageID, filename: "image001.png", notes: "keep for review")
+            ]),
+            selectedImageID: imageID,
+            hasUnsavedChanges: false
+        )
+
+        try model.updateSelectedImageNotes(" keep for review ")
+
+        XCTAssertEqual(model.workspace.images[0].notes, "keep for review")
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
     func testSelectedImageReturnsCurrentImageEntry() {
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let model = AppModel(
@@ -321,12 +350,14 @@ private func workspaceWithImages(_ images: [ImageEntry]) -> WorkspaceDocument {
 private func imageEntry(
     id: UUID,
     filename: String,
+    notes: String = "",
     classification: Classification = Classification()
 ) -> ImageEntry {
     ImageEntry(
         id: id,
         sourcePath: "/tmp/source/\(filename)",
         displayName: filename,
+        notes: notes,
         classification: classification
     )
 }
