@@ -1,6 +1,7 @@
 import XCTest
 @testable import SpIceDBCore
 
+@MainActor
 final class ImageGenerationRunnerTests: XCTestCase {
     func testGeneratesImageIntoWorkingDirectoryAndRecordsOutput() async throws {
         let directory = try ImageGenerationTemporaryDirectory()
@@ -155,7 +156,7 @@ final class ImageGenerationRunnerTests: XCTestCase {
     }
 }
 
-private final class StubImageGenerationProvider: ImageGenerationProviding {
+private final class StubImageGenerationProvider: ImageGenerationProviding, @unchecked Sendable {
     private let asset: GeneratedImageAsset
     private(set) var requests: [ImageGenerationRequest] = []
 

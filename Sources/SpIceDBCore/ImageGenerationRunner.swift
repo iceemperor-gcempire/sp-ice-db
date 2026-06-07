@@ -9,7 +9,7 @@ public enum ImageGenerationRunnerError: Error, Equatable {
     case generatedDataEmpty
 }
 
-public struct ImageGenerationRequest: Equatable {
+public struct ImageGenerationRequest: Equatable, Sendable {
     public var imageID: UUID
     public var sourcePath: String
     public var displayName: String?
@@ -34,7 +34,7 @@ public struct ImageGenerationRequest: Equatable {
     }
 }
 
-public struct GeneratedImageAsset: Equatable {
+public struct GeneratedImageAsset: Equatable, Sendable {
     public var data: Data
     public var suggestedFilename: String?
 
@@ -44,11 +44,11 @@ public struct GeneratedImageAsset: Equatable {
     }
 }
 
-public protocol ImageGenerationProviding {
+public protocol ImageGenerationProviding: Sendable {
     func generateImage(request: ImageGenerationRequest) async throws -> GeneratedImageAsset
 }
 
-public struct ImageGenerationRunner {
+public struct ImageGenerationRunner: @unchecked Sendable {
     private let provider: any ImageGenerationProviding
     private let fileManager: FileManager
     private let idGenerator: () -> UUID
@@ -67,6 +67,7 @@ public struct ImageGenerationRunner {
     }
 
     @discardableResult
+    @MainActor
     public func generateImage(
         imageID: UUID,
         settingsID: UUID? = nil,

@@ -575,6 +575,109 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    @MainActor
+    func testGenerateSelectedImageWritesProviderOutputRecordsOutputAndMarksUnsavedChanges() async throws {
+        let directory = try TemporaryDirectory()
+        let sourceURL = directory.url.appendingPathComponent("source/image001.png")
+        let workingURL = directory.url.appendingPathComponent("generated")
+        try FileManager.default.createDirectory(at: sourceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: sourceURL)
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let outputID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let generatedAt = Date(timeIntervalSince1970: 1_800_001_200)
+        let ids = DeterministicUUIDGenerator([outputID])
+        let provider = StubImageGenerationProvider(
+            asset: GeneratedImageAsset(
+                data: Data([7, 8, 9]),
+                suggestedFilename: "variant.png"
+            )
+        )
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [
+                    ImageEntry(
+                        id: imageID,
+                        sourcePath: sourceURL.path,
+                        displayName: "image001.png"
+                    )
+                ],
+                workingDirectory: workingURL.path
+            ),
+            selectedImageID: imageID,
+            hasUnsavedChanges: false,
+            idGenerator: ids.next,
+            imageGenerationProvider: provider,
+            now: { generatedAt }
+        )
+
+        let output = try await model.generateSelectedImage()
+
+        let expectedURL = workingURL.appendingPathComponent("variant.png")
+        XCTAssertEqual(
+            output,
+            GeneratedOutput(
+                id: outputID,
+                path: expectedURL.path,
+                status: .generated,
+                createdAt: generatedAt,
+                settingsId: nil
+            )
+        )
+        XCTAssertEqual(model.workspace.images[0].generatedOutputs, [output])
+        XCTAssertEqual(try Data(contentsOf: expectedURL), Data([7, 8, 9]))
+        XCTAssertEqual(provider.requests.map(\.sourcePath), [sourceURL.path])
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertFalse(model.isGeneratingSelectedImage)
+    }
+
+    @MainActor
+    func testGenerateSelectedImageSetsRunningStateDuringProviderCall() async throws {
+        let directory = try TemporaryDirectory()
+        let sourceURL = directory.url.appendingPathComponent("source/image001.png")
+        let workingURL = directory.url.appendingPathComponent("generated")
+        try FileManager.default.createDirectory(at: sourceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([1]).write(to: sourceURL)
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let probe = RunningStateProbe()
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [
+                    ImageEntry(
+                        id: imageID,
+                        sourcePath: sourceURL.path,
+                        displayName: "image001.png"
+                    )
+                ],
+                workingDirectory: workingURL.path
+            ),
+            selectedImageID: imageID,
+            imageGenerationProvider: StubImageGenerationProvider(
+                asset: GeneratedImageAsset(data: Data([2]), suggestedFilename: "out.png"),
+                onGenerate: { probe.check() }
+            )
+        )
+        probe.check = {
+            XCTAssertTrue(model.isGeneratingSelectedImage)
+        }
+
+        _ = try await model.generateSelectedImage()
+
+        XCTAssertFalse(model.isGeneratingSelectedImage)
+    }
+
+    @MainActor
+    func testGenerateSelectedImageRequiresSelection() async {
+        let model = AppModel(hasUnsavedChanges: false)
+
+        await XCTAssertThrowsErrorAsync(
+            try await model.generateSelectedImage()
+        ) { error in
+            XCTAssertEqual(error as? AppModelError, .imageSelectionRequired)
+        }
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertFalse(model.isGeneratingSelectedImage)
+    }
+
     func testExportDatasetCaptionsWritesSidecarFilesStoresReportAndDoesNotMarkUnsavedChanges() throws {
         let directory = try TemporaryDirectory()
         let outputURL = directory.url.appendingPathComponent("generated/image001.png")
@@ -848,6 +951,23 @@ private final class StubAIClassificationProvider: AIClassificationProviding, @un
         onClassify()
         requests.append(Request(payload: payload, provider: provider, generatedAt: generatedAt))
         return result
+    }
+}
+
+private final class StubImageGenerationProvider: ImageGenerationProviding, @unchecked Sendable {
+    private let asset: GeneratedImageAsset
+    private let onGenerate: () -> Void
+    private(set) var requests: [ImageGenerationRequest] = []
+
+    init(asset: GeneratedImageAsset, onGenerate: @escaping () -> Void = {}) {
+        self.asset = asset
+        self.onGenerate = onGenerate
+    }
+
+    func generateImage(request: ImageGenerationRequest) async throws -> GeneratedImageAsset {
+        onGenerate()
+        requests.append(request)
+        return asset
     }
 }
 

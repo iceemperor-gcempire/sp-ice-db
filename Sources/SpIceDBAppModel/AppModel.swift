@@ -9,6 +9,7 @@ public final class AppModel {
     public var workspaceURL: URL?
     public var hasUnsavedChanges: Bool
     public var isClassifyingSelectedImage: Bool
+    public var isGeneratingSelectedImage: Bool
     public var latestDatasetExportReport: DatasetExportReport?
 
     private let imageLibrary: ImageLibrary
@@ -17,6 +18,7 @@ public final class AppModel {
     private let aiProviderLibrary: AIProviderLibrary
     private let aiClassificationProvider: any AIClassificationProviding
     private let generatedImageWorkspace: GeneratedImageWorkspace
+    private let imageGenerationRunner: ImageGenerationRunner
     private let datasetExporter: DatasetExporter
     private let workspaceStore: WorkspaceStore
     private let now: () -> Date
@@ -27,10 +29,12 @@ public final class AppModel {
         workspaceURL: URL? = nil,
         hasUnsavedChanges: Bool = false,
         isClassifyingSelectedImage: Bool = false,
+        isGeneratingSelectedImage: Bool = false,
         idGenerator: @escaping () -> UUID = UUID.init,
         imageFileStatusProvider: ImageFileStatusProviding = FileManagerImageFileStatusProvider(),
         imageFileReader: ImageFileReading = FileManagerImageFileReader(),
         aiClassificationProvider: any AIClassificationProviding = OpenAICompatibleAIClassificationProvider(),
+        imageGenerationProvider: any ImageGenerationProviding = UnavailableImageGenerationProvider(),
         now: @escaping () -> Date = Date.init
     ) {
         self.workspace = workspace
@@ -38,6 +42,7 @@ public final class AppModel {
         self.workspaceURL = workspaceURL
         self.hasUnsavedChanges = hasUnsavedChanges
         self.isClassifyingSelectedImage = isClassifyingSelectedImage
+        self.isGeneratingSelectedImage = isGeneratingSelectedImage
         self.imageLibrary = ImageLibrary(
             idGenerator: idGenerator,
             fileStatusProvider: imageFileStatusProvider
@@ -47,6 +52,11 @@ public final class AppModel {
         self.aiProviderLibrary = AIProviderLibrary(idGenerator: idGenerator)
         self.aiClassificationProvider = aiClassificationProvider
         self.generatedImageWorkspace = GeneratedImageWorkspace(idGenerator: idGenerator, now: now)
+        self.imageGenerationRunner = ImageGenerationRunner(
+            provider: imageGenerationProvider,
+            idGenerator: idGenerator,
+            now: now
+        )
         self.datasetExporter = DatasetExporter()
         self.workspaceStore = WorkspaceStore(now: now)
         self.now = now
@@ -91,6 +101,7 @@ public final class AppModel {
         workspaceURL = nil
         hasUnsavedChanges = false
         isClassifyingSelectedImage = false
+        isGeneratingSelectedImage = false
         latestDatasetExportReport = nil
     }
 
@@ -297,6 +308,25 @@ public final class AppModel {
         return output
     }
 
+    @MainActor
+    @discardableResult
+    public func generateSelectedImage(settingsID: UUID? = nil) async throws -> GeneratedOutput {
+        let imageID = try requireSelectedImageID()
+        isGeneratingSelectedImage = true
+        defer {
+            isGeneratingSelectedImage = false
+        }
+        var document = workspace
+        let output = try await imageGenerationRunner.generateImage(
+            imageID: imageID,
+            settingsID: settingsID,
+            in: &document
+        )
+        workspace = document
+        hasUnsavedChanges = true
+        return output
+    }
+
     @discardableResult
     public func exportDatasetCaptions(options: DatasetExportOptions) throws -> DatasetExportReport {
         let report = try datasetExporter.exportCaptions(from: workspace, options: options)
@@ -309,6 +339,7 @@ public final class AppModel {
         workspaceURL = url
         selectedImageID = workspace.images.first?.id
         hasUnsavedChanges = false
+        isGeneratingSelectedImage = false
         latestDatasetExportReport = nil
     }
 
@@ -341,6 +372,7 @@ public enum AppModelError: Error, Equatable {
     case workspaceURLRequired
     case aiProviderNotFound
     case aiClassificationProviderUnavailable
+    case imageGenerationProviderUnavailable
 }
 
 public struct ImageStatusSummary: Equatable {
@@ -372,6 +404,14 @@ public struct UnavailableAIClassificationProvider: AIClassificationProviding {
         generatedAt: Date?
     ) async throws -> AIClassificationContent {
         throw AppModelError.aiClassificationProviderUnavailable
+    }
+}
+
+public struct UnavailableImageGenerationProvider: ImageGenerationProviding {
+    public init() {}
+
+    public func generateImage(request: ImageGenerationRequest) async throws -> GeneratedImageAsset {
+        throw AppModelError.imageGenerationProviderUnavailable
     }
 }
 

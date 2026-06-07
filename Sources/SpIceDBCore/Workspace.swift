@@ -108,7 +108,7 @@ public struct ImageEntry: Codable, Equatable {
     }
 }
 
-public struct Classification: Codable, Equatable {
+public struct Classification: Codable, Equatable, Sendable {
     public var user: ClassificationContent
     public var ai: AIClassificationContent?
 
@@ -118,7 +118,7 @@ public struct Classification: Codable, Equatable {
     }
 }
 
-public struct ClassificationContent: Codable, Equatable {
+public struct ClassificationContent: Codable, Equatable, Sendable {
     public var sentence: String
     public var tags: [String]
 
@@ -150,8 +150,8 @@ public struct AIClassificationContent: Codable, Equatable, Sendable {
     }
 }
 
-public struct GeneratedOutput: Codable, Equatable {
-    public enum Status: String, Codable, Equatable {
+public struct GeneratedOutput: Codable, Equatable, Sendable {
+    public enum Status: String, Codable, Equatable, Sendable {
         case pending
         case generated
         case failed
@@ -173,7 +173,7 @@ public struct GeneratedOutput: Codable, Equatable {
     }
 }
 
-public struct GenerationSettings: Codable, Equatable {
+public struct GenerationSettings: Codable, Equatable, Sendable {
     public var id: UUID
     public var name: String
     public var providerId: UUID?
@@ -187,7 +187,7 @@ public struct GenerationSettings: Codable, Equatable {
     }
 }
 
-public enum JSONValue: Codable, Equatable {
+public enum JSONValue: Codable, Equatable, Sendable {
     case string(String)
     case number(Double)
     case bool(Bool)
