@@ -393,6 +393,37 @@ public final class AppModel {
         return output
     }
 
+    @MainActor
+    @discardableResult
+    public func generateAllImages(
+        providerID: UUID? = nil,
+        settingsID: UUID? = nil
+    ) async throws -> [GeneratedOutput] {
+        let imageIDs = workspace.images.map(\.id)
+        let runner = try imageGenerationRunner(for: providerID)
+        isGeneratingSelectedImage = true
+        defer {
+            isGeneratingSelectedImage = false
+        }
+
+        var document = workspace
+        var outputs: [GeneratedOutput] = []
+        for imageID in imageIDs {
+            let output = try await runner.generateImage(
+                imageID: imageID,
+                settingsID: settingsID,
+                in: &document
+            )
+            outputs.append(output)
+        }
+
+        workspace = document
+        if !outputs.isEmpty {
+            hasUnsavedChanges = true
+        }
+        return outputs
+    }
+
     private func imageGenerationRunner(for providerID: UUID?) throws -> ImageGenerationRunner {
         guard let providerID else {
             return imageGenerationRunner

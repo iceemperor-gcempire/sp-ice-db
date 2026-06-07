@@ -730,6 +730,68 @@ final class AppModelTests: XCTestCase {
     }
 
     @MainActor
+    func testGenerateAllImagesWritesOutputsForEveryWorkspaceImage() async throws {
+        let directory = try TemporaryDirectory()
+        let firstSourceURL = directory.url.appendingPathComponent("source/image001.png")
+        let secondSourceURL = directory.url.appendingPathComponent("source/image002.png")
+        let workingURL = directory.url.appendingPathComponent("generated")
+        try FileManager.default.createDirectory(at: firstSourceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([1]).write(to: firstSourceURL)
+        try Data([2]).write(to: secondSourceURL)
+        let firstImageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let secondImageID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let providerID = UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!
+        let settingsID = UUID(uuidString: "DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD")!
+        let firstOutputID = UUID(uuidString: "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE")!
+        let secondOutputID = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
+        let ids = DeterministicUUIDGenerator([firstOutputID, secondOutputID])
+        let provider = StubImageGenerationProvider(
+            assets: [
+                GeneratedImageAsset(data: Data([3]), suggestedFilename: "batch.png"),
+                GeneratedImageAsset(data: Data([4]), suggestedFilename: "batch.png")
+            ]
+        )
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [
+                    ImageEntry(id: firstImageID, sourcePath: firstSourceURL.path, displayName: "image001.png"),
+                    ImageEntry(id: secondImageID, sourcePath: secondSourceURL.path, displayName: "image002.png")
+                ],
+                aiProviders: [providerProfile(id: providerID)],
+                workingDirectory: workingURL.path,
+                generationSettings: [
+                    GenerationSettings(
+                        id: settingsID,
+                        name: "Batch",
+                        providerId: providerID,
+                        parameters: ["prompt": .string("batch prompt")]
+                    )
+                ]
+            ),
+            hasUnsavedChanges: false,
+            idGenerator: ids.next,
+            imageGenerationProviderFactory: { _ in provider }
+        )
+
+        let outputs = try await model.generateAllImages(providerID: providerID, settingsID: settingsID)
+
+        XCTAssertEqual(outputs.map(\.id), [firstOutputID, secondOutputID])
+        XCTAssertEqual(outputs.map(\.settingsId), [settingsID, settingsID])
+        XCTAssertEqual(outputs.map(\.path), [
+            workingURL.appendingPathComponent("batch.png").path,
+            workingURL.appendingPathComponent("batch_001.png").path
+        ])
+        XCTAssertEqual(model.workspace.images[0].generatedOutputs, [outputs[0]])
+        XCTAssertEqual(model.workspace.images[1].generatedOutputs, [outputs[1]])
+        XCTAssertEqual(provider.requests.map(\.imageID), [firstImageID, secondImageID])
+        XCTAssertEqual(provider.requests.map(\.settings?.id), [settingsID, settingsID])
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: outputs[0].path)), Data([3]))
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: outputs[1].path)), Data([4]))
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertFalse(model.isGeneratingSelectedImage)
+    }
+
+    @MainActor
     func testGenerateSelectedImageSetsRunningStateDuringProviderCall() async throws {
         let directory = try TemporaryDirectory()
         let sourceURL = directory.url.appendingPathComponent("source/image001.png")
@@ -1056,19 +1118,24 @@ private final class StubAIClassificationProvider: AIClassificationProviding, @un
 }
 
 private final class StubImageGenerationProvider: ImageGenerationProviding, @unchecked Sendable {
-    private let asset: GeneratedImageAsset
+    private var assets: [GeneratedImageAsset]
     private let onGenerate: () -> Void
     private(set) var requests: [ImageGenerationRequest] = []
 
     init(asset: GeneratedImageAsset, onGenerate: @escaping () -> Void = {}) {
-        self.asset = asset
+        self.assets = [asset]
+        self.onGenerate = onGenerate
+    }
+
+    init(assets: [GeneratedImageAsset], onGenerate: @escaping () -> Void = {}) {
+        self.assets = assets
         self.onGenerate = onGenerate
     }
 
     func generateImage(request: ImageGenerationRequest) async throws -> GeneratedImageAsset {
         onGenerate()
         requests.append(request)
-        return asset
+        return assets.count > 1 ? assets.removeFirst() : assets[0]
     }
 }
 

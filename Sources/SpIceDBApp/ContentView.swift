@@ -369,6 +369,17 @@ struct ContentView: View {
                     || model.workspace.workspace.workingDirectory == nil
                     || model.selectedImageStatus != .readable
                     || model.isGeneratingSelectedImage)
+
+                Button {
+                    generateAllImages()
+                } label: {
+                    Label("Generate Workspace With AI", systemImage: "wand.and.stars.inverse")
+                }
+                .disabled(selectedProviderID == nil
+                    || selectedGenerationSettingsID == nil
+                    || model.workspace.images.isEmpty
+                    || model.workspace.workspace.workingDirectory == nil
+                    || model.isGeneratingSelectedImage)
             }
 
             Section("Dataset Export") {
@@ -822,6 +833,23 @@ struct ContentView: View {
         Task {
             do {
                 try await model.generateSelectedImage(
+                    providerID: selectedProviderID,
+                    settingsID: selectedGenerationSettingsID
+                )
+            } catch {
+                errorMessage = String(describing: error)
+            }
+        }
+    }
+
+    private func generateAllImages() {
+        guard let selectedProviderID else {
+            return
+        }
+
+        Task {
+            do {
+                try await model.generateAllImages(
                     providerID: selectedProviderID,
                     settingsID: selectedGenerationSettingsID
                 )
