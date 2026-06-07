@@ -18,6 +18,8 @@ struct ContentView: View {
     @State private var providerAPIKeyRef = ""
     @State private var providerSupportsImageInput = true
     @State private var providerTimeoutSeconds = 60.0
+    @State private var datasetMetadataSource: DatasetMetadataSource = .user
+    @State private var datasetCaptionFormat: DatasetCaptionFormat = .sentence
     @State private var errorMessage: String?
 
     private let workspaceContentType = UTType(filenameExtension: "spicedb") ?? .json
@@ -338,6 +340,32 @@ struct ContentView: View {
                     || model.selectedImageStatus != .readable)
             }
 
+            Section("Dataset Export") {
+                Picker("Metadata", selection: $datasetMetadataSource) {
+                    Text("User").tag(DatasetMetadataSource.user)
+                    Text("AI").tag(DatasetMetadataSource.ai)
+                    Text("User, AI Fallback").tag(DatasetMetadataSource.userWithAIFallback)
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Caption", selection: $datasetCaptionFormat) {
+                    Text("Sentence").tag(DatasetCaptionFormat.sentence)
+                    Text("Tags").tag(DatasetCaptionFormat.tags)
+                }
+                .pickerStyle(.segmented)
+
+                Button {
+                    exportDatasetCaptions()
+                } label: {
+                    Label("Export Captions For Workspace", systemImage: "square.and.arrow.up")
+                }
+                .disabled(!hasGeneratedDatasetOutputs)
+
+                if let report = model.latestDatasetExportReport {
+                    datasetExportReportView(report)
+                }
+            }
+
             Section {
                 Button(role: .destructive) {
                     removeSelectedImage()
@@ -656,6 +684,19 @@ struct ContentView: View {
         }
     }
 
+    private func exportDatasetCaptions() {
+        do {
+            try model.exportDatasetCaptions(
+                options: DatasetExportOptions(
+                    metadataSource: datasetMetadataSource,
+                    captionFormat: datasetCaptionFormat
+                )
+            )
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
     private func syncEditorFields() {
         imageNotes = model.selectedImage?.notes ?? ""
         userSentence = model.selectedImage?.classification.user.sentence ?? ""
@@ -695,6 +736,39 @@ struct ContentView: View {
             "Unreadable File"
         case nil:
             "No Image Selected"
+        }
+    }
+
+    private var hasGeneratedDatasetOutputs: Bool {
+        model.workspace.images.contains { image in
+            image.generatedOutputs.contains { $0.status == .generated }
+        }
+    }
+
+    private func datasetExportReportView(_ report: DatasetExportReport) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("\(report.writtenCaptionPaths.count) captions written", systemImage: "doc.text")
+
+            if report.issues.isEmpty {
+                Label("No validation issues", systemImage: "checkmark.circle")
+                    .foregroundStyle(.green)
+            } else {
+                ForEach(Array(report.issues.enumerated()), id: \.offset) { _, issue in
+                    Label(datasetExportIssueText(issue), systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .font(.caption)
+    }
+
+    private func datasetExportIssueText(_ issue: DatasetExportIssue) -> String {
+        switch issue {
+        case .generatedFileMissing(_, _, let path):
+            "Missing generated file: \(URL(fileURLWithPath: path).lastPathComponent)"
+        case .captionMissing:
+            "Missing caption metadata"
         }
     }
 

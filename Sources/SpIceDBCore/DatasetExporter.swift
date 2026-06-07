@@ -1,12 +1,12 @@
 import Foundation
 
-public enum DatasetMetadataSource: Equatable {
+public enum DatasetMetadataSource: Equatable, Hashable {
     case user
     case ai
     case userWithAIFallback
 }
 
-public enum DatasetCaptionFormat: Equatable {
+public enum DatasetCaptionFormat: Equatable, Hashable {
     case sentence
     case tags
 }
