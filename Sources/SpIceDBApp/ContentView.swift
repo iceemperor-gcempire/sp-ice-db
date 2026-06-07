@@ -18,6 +18,12 @@ struct ContentView: View {
     @State private var providerAPIKeyRef = ""
     @State private var providerSupportsImageInput = true
     @State private var providerTimeoutSeconds = 60.0
+    @State private var selectedGenerationSettingsID: UUID?
+    @State private var generationSettingsName = ""
+    @State private var generationPrompt = ""
+    @State private var generationSize = "1024x1024"
+    @State private var generationQuality = "auto"
+    @State private var generationOutputFormat = "png"
     @State private var datasetMetadataSource: DatasetMetadataSource = .user
     @State private var datasetCaptionFormat: DatasetCaptionFormat = .sentence
     @State private var errorMessage: String?
@@ -40,6 +46,8 @@ struct ContentView: View {
                     syncEditorFields()
                     selectedProviderID = nil
                     syncProviderFields()
+                    selectedGenerationSettingsID = nil
+                    syncGenerationSettingsFields()
                 } label: {
                     Label("New Workspace", systemImage: "doc.badge.plus")
                 }
@@ -88,11 +96,16 @@ struct ContentView: View {
         .onChange(of: selectedProviderID) {
             syncProviderFields()
         }
+        .onChange(of: selectedGenerationSettingsID) {
+            syncGenerationSettingsFields()
+        }
         .onAppear {
             syncWorkspaceFields()
             syncEditorFields()
             selectedProviderID = model.workspace.aiProviders.first?.id
             syncProviderFields()
+            selectedGenerationSettingsID = model.workspace.generationSettings.first?.id
+            syncGenerationSettingsFields()
         }
         .alert("sp-ice-db", isPresented: errorPresented) {
             Button("OK") {
@@ -200,6 +213,9 @@ struct ContentView: View {
             imagePathBar
             GroupBox("AI Provider") {
                 providerEditor
+            }
+            GroupBox("Generation Settings") {
+                generationSettingsEditor
             }
 
             if let image = model.selectedImage {
@@ -348,6 +364,7 @@ struct ContentView: View {
                     )
                 }
                 .disabled(selectedProviderID == nil
+                    || selectedGenerationSettingsID == nil
                     || model.selectedImageID == nil
                     || model.workspace.workspace.workingDirectory == nil
                     || model.selectedImageStatus != .readable
@@ -448,6 +465,58 @@ struct ContentView: View {
         }
     }
 
+    private var generationSettingsEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Preset", selection: generationSettingsSelection) {
+                Text("New Preset").tag(Optional<UUID>.none)
+                ForEach(model.workspace.generationSettings, id: \.id) { settings in
+                    Text(settings.name).tag(Optional(settings.id))
+                }
+            }
+            .pickerStyle(.menu)
+
+            TextField("Name", text: $generationSettingsName)
+                .textFieldStyle(.roundedBorder)
+
+            TextField("Prompt", text: $generationPrompt, axis: .vertical)
+                .lineLimit(2...5)
+                .textFieldStyle(.roundedBorder)
+
+            HStack {
+                TextField("Size", text: $generationSize)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Quality", text: $generationQuality)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Format", text: $generationOutputFormat)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack {
+                Button {
+                    saveGenerationSettings()
+                } label: {
+                    Label(selectedGenerationSettingsID == nil ? "Add Preset" : "Update Preset", systemImage: "slider.horizontal.3")
+                }
+                .disabled(generationSettingsName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button {
+                    resetGenerationSettingsDraft()
+                } label: {
+                    Label("New", systemImage: "plus")
+                }
+
+                Button(role: .destructive) {
+                    removeGenerationSettings()
+                } label: {
+                    Label("Remove", systemImage: "trash")
+                }
+                .disabled(selectedGenerationSettingsID == nil)
+            }
+        }
+    }
+
     @ViewBuilder
     private func imagePreview(for image: ImageEntry) -> some View {
         if model.selectedImageStatus == .readable,
@@ -482,6 +551,13 @@ struct ContentView: View {
         Binding(
             get: { selectedProviderID },
             set: { selectedProviderID = $0 }
+        )
+    }
+
+    private var generationSettingsSelection: Binding<UUID?> {
+        Binding(
+            get: { selectedGenerationSettingsID },
+            set: { selectedGenerationSettingsID = $0 }
         )
     }
 
@@ -582,6 +658,44 @@ struct ContentView: View {
         syncProviderFields()
     }
 
+    private func saveGenerationSettings() {
+        do {
+            if let selectedGenerationSettingsID {
+                try model.updateGenerationSettings(
+                    id: selectedGenerationSettingsID,
+                    name: generationSettingsName,
+                    providerId: selectedProviderID,
+                    parameters: generationParameters()
+                )
+            } else {
+                let settings = try model.addGenerationSettings(
+                    name: generationSettingsName,
+                    providerId: selectedProviderID,
+                    parameters: generationParameters()
+                )
+                selectedGenerationSettingsID = settings.id
+            }
+            syncGenerationSettingsFields()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    private func removeGenerationSettings() {
+        guard let selectedGenerationSettingsID else {
+            return
+        }
+
+        _ = model.removeGenerationSettings(id: selectedGenerationSettingsID)
+        self.selectedGenerationSettingsID = model.workspace.generationSettings.first?.id
+        syncGenerationSettingsFields()
+    }
+
+    private func resetGenerationSettingsDraft() {
+        selectedGenerationSettingsID = nil
+        syncGenerationSettingsFields()
+    }
+
     private func openWorkspace() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [workspaceContentType]
@@ -600,6 +714,8 @@ struct ContentView: View {
             syncEditorFields()
             selectedProviderID = model.workspace.aiProviders.first?.id
             syncProviderFields()
+            selectedGenerationSettingsID = model.workspace.generationSettings.first?.id
+            syncGenerationSettingsFields()
         } catch {
             errorMessage = String(describing: error)
         }
@@ -705,7 +821,10 @@ struct ContentView: View {
 
         Task {
             do {
-                try await model.generateSelectedImage(providerID: selectedProviderID)
+                try await model.generateSelectedImage(
+                    providerID: selectedProviderID,
+                    settingsID: selectedGenerationSettingsID
+                )
             } catch {
                 errorMessage = String(describing: error)
             }
@@ -752,6 +871,50 @@ struct ContentView: View {
         providerAPIKeyRef = provider.apiKeyRef ?? ""
         providerSupportsImageInput = provider.supportsImageInput
         providerTimeoutSeconds = provider.timeoutSeconds
+    }
+
+    private func syncGenerationSettingsFields() {
+        guard let settings = model.workspace.generationSettings.first(where: { $0.id == selectedGenerationSettingsID }) else {
+            generationSettingsName = ""
+            generationPrompt = ""
+            generationSize = "1024x1024"
+            generationQuality = "auto"
+            generationOutputFormat = "png"
+            return
+        }
+
+        generationSettingsName = settings.name
+        generationPrompt = stringParameter("prompt", from: settings.parameters) ?? ""
+        generationSize = stringParameter("size", from: settings.parameters) ?? "1024x1024"
+        generationQuality = stringParameter("quality", from: settings.parameters) ?? "auto"
+        generationOutputFormat = stringParameter("output_format", from: settings.parameters) ?? "png"
+        if let providerId = settings.providerId {
+            selectedProviderID = providerId
+        }
+    }
+
+    private func generationParameters() -> [String: JSONValue] {
+        var parameters: [String: JSONValue] = [:]
+        setStringParameter("prompt", generationPrompt, in: &parameters)
+        setStringParameter("size", generationSize, in: &parameters)
+        setStringParameter("quality", generationQuality, in: &parameters)
+        setStringParameter("output_format", generationOutputFormat, in: &parameters)
+        return parameters
+    }
+
+    private func setStringParameter(_ key: String, _ value: String, in parameters: inout [String: JSONValue]) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            parameters[key] = .string(trimmed)
+        }
+    }
+
+    private func stringParameter(_ key: String, from parameters: [String: JSONValue]) -> String? {
+        guard case .string(let value)? = parameters[key] else {
+            return nil
+        }
+
+        return value
     }
 
     private var selectedImageStatusText: String {

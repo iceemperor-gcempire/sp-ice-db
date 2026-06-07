@@ -16,6 +16,7 @@ public final class AppModel {
     private let imagePayloadReader: ImagePayloadReader
     private let classificationLibrary: ClassificationLibrary
     private let aiProviderLibrary: AIProviderLibrary
+    private let generationSettingsLibrary: GenerationSettingsLibrary
     private let aiClassificationProvider: any AIClassificationProviding
     private let generatedImageWorkspace: GeneratedImageWorkspace
     private let imageGenerationRunner: ImageGenerationRunner
@@ -61,6 +62,7 @@ public final class AppModel {
         self.imagePayloadReader = ImagePayloadReader(fileReader: imageFileReader)
         self.classificationLibrary = ClassificationLibrary()
         self.aiProviderLibrary = AIProviderLibrary(idGenerator: idGenerator)
+        self.generationSettingsLibrary = GenerationSettingsLibrary(idGenerator: idGenerator)
         self.aiClassificationProvider = aiClassificationProvider
         self.generatedImageWorkspace = GeneratedImageWorkspace(idGenerator: idGenerator, now: now)
         self.imageGenerationRunner = ImageGenerationRunner(
@@ -195,6 +197,53 @@ public final class AppModel {
     @discardableResult
     public func removeAIProvider(id: UUID) -> AIProviderProfile? {
         guard let removed = aiProviderLibrary.removeProvider(id: id, from: &workspace) else {
+            return nil
+        }
+
+        hasUnsavedChanges = true
+        return removed
+    }
+
+    @discardableResult
+    public func addGenerationSettings(
+        name: String,
+        providerId: UUID?,
+        parameters: [String: JSONValue]
+    ) throws -> GenerationSettings {
+        let settings = try generationSettingsLibrary.addSettings(
+            name: name,
+            providerId: providerId,
+            parameters: parameters,
+            to: &workspace
+        )
+        hasUnsavedChanges = true
+        return settings
+    }
+
+    @discardableResult
+    public func updateGenerationSettings(
+        id: UUID,
+        name: String,
+        providerId: UUID?,
+        parameters: [String: JSONValue]
+    ) throws -> GenerationSettings {
+        let previous = workspace.generationSettings.first(where: { $0.id == id })
+        let settings = try generationSettingsLibrary.updateSettings(
+            id: id,
+            name: name,
+            providerId: providerId,
+            parameters: parameters,
+            in: &workspace
+        )
+        if previous != settings {
+            hasUnsavedChanges = true
+        }
+        return settings
+    }
+
+    @discardableResult
+    public func removeGenerationSettings(id: UUID) -> GenerationSettings? {
+        guard let removed = generationSettingsLibrary.removeSettings(id: id, from: &workspace) else {
             return nil
         }
 

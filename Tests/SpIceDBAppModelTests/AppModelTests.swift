@@ -135,6 +135,54 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.removeAIProvider(id: providerID))
     }
 
+    func testAddUpdateAndRemoveGenerationSettingsTracksUnsavedChanges() throws {
+        let settingsID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let ids = DeterministicUUIDGenerator([settingsID])
+        let model = AppModel(
+            workspace: workspaceWithImages([], aiProviders: [providerProfile(id: providerID)]),
+            hasUnsavedChanges: false,
+            idGenerator: ids.next
+        )
+
+        let settings = try model.addGenerationSettings(
+            name: "  Product  ",
+            providerId: providerID,
+            parameters: [
+                "prompt": .string("  clean bottle  "),
+                "size": .string("1024x1024")
+            ]
+        )
+
+        XCTAssertEqual(settings.id, settingsID)
+        XCTAssertEqual(settings.name, "Product")
+        XCTAssertEqual(settings.parameters["prompt"], .string("clean bottle"))
+        XCTAssertEqual(model.workspace.generationSettings, [settings])
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        model.hasUnsavedChanges = false
+        let updated = try model.updateGenerationSettings(
+            id: settingsID,
+            name: "Product High",
+            providerId: providerID,
+            parameters: ["prompt": .string("clean bottle"), "quality": .string("high")]
+        )
+
+        XCTAssertEqual(model.workspace.generationSettings, [updated])
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        model.hasUnsavedChanges = false
+        let removed = model.removeGenerationSettings(id: settingsID)
+
+        XCTAssertEqual(removed?.id, settingsID)
+        XCTAssertEqual(model.workspace.generationSettings, [])
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        model.hasUnsavedChanges = false
+        XCTAssertNil(model.removeGenerationSettings(id: settingsID))
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
     func testAddImageSelectsNewEntryAndMarksUnsavedChanges() throws {
         let ids = DeterministicUUIDGenerator([
             UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
@@ -639,6 +687,7 @@ final class AppModelTests: XCTestCase {
         try Data([1]).write(to: sourceURL)
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let settingsID = UUID(uuidString: "DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD")!
         let imageGenerationProvider = StubImageGenerationProvider(
             asset: GeneratedImageAsset(data: Data([2]), suggestedFilename: "provider-output.png")
         )
@@ -653,7 +702,15 @@ final class AppModelTests: XCTestCase {
                     )
                 ],
                 aiProviders: [providerProfile(id: providerID)],
-                workingDirectory: workingURL.path
+                workingDirectory: workingURL.path,
+                generationSettings: [
+                    GenerationSettings(
+                        id: settingsID,
+                        name: "Preset",
+                        providerId: providerID,
+                        parameters: ["prompt": .string("preset prompt")]
+                    )
+                ]
             ),
             selectedImageID: imageID,
             imageGenerationProviderFactory: { provider in
@@ -662,10 +719,12 @@ final class AppModelTests: XCTestCase {
             }
         )
 
-        let output = try await model.generateSelectedImage(providerID: providerID)
+        let output = try await model.generateSelectedImage(providerID: providerID, settingsID: settingsID)
 
         XCTAssertEqual(factoryProvider?.id, providerID)
         XCTAssertEqual(output.path, workingURL.appendingPathComponent("provider-output.png").path)
+        XCTAssertEqual(output.settingsId, settingsID)
+        XCTAssertEqual(imageGenerationProvider.requests.map(\.settings?.id), [settingsID])
         XCTAssertEqual(imageGenerationProvider.requests.map(\.sourcePath), [sourceURL.path])
         XCTAssertTrue(model.hasUnsavedChanges)
     }
@@ -906,7 +965,8 @@ private func workspaceInfo(name: String, workingDirectory: String? = nil) -> Wor
 private func workspaceWithImages(
     _ images: [ImageEntry],
     aiProviders: [AIProviderProfile] = [],
-    workingDirectory: String? = nil
+    workingDirectory: String? = nil,
+    generationSettings: [GenerationSettings] = []
 ) -> WorkspaceDocument {
     WorkspaceDocument(
         workspace: WorkspaceInfo(
@@ -917,7 +977,8 @@ private func workspaceWithImages(
             workingDirectory: workingDirectory
         ),
         aiProviders: aiProviders,
-        images: images
+        images: images,
+        generationSettings: generationSettings
     )
 }
 
