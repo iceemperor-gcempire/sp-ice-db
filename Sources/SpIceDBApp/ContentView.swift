@@ -304,6 +304,40 @@ struct ContentView: View {
                     || model.isClassifyingSelectedImage)
             }
 
+            Section("Generated Outputs") {
+                if image.generatedOutputs.isEmpty {
+                    ContentUnavailableView(
+                        "No Generated Outputs",
+                        systemImage: "tray",
+                        description: Text("Collect the selected source image into the working directory.")
+                    )
+                } else {
+                    ForEach(image.generatedOutputs, id: \.id) { output in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Label(output.status.rawValue.capitalized, systemImage: generatedOutputSystemImage(for: output.status))
+                                Spacer()
+                                Text(output.createdAt.formatted())
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(output.path)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+
+                Button {
+                    collectSelectedImage()
+                } label: {
+                    Label("Collect To Working Directory", systemImage: "tray.and.arrow.down")
+                }
+                .disabled(model.selectedImageID == nil
+                    || model.workspace.workspace.workingDirectory == nil
+                    || model.selectedImageStatus != .readable)
+            }
+
             Section {
                 Button(role: .destructive) {
                     removeSelectedImage()
@@ -614,6 +648,14 @@ struct ContentView: View {
         }
     }
 
+    private func collectSelectedImage() {
+        do {
+            try model.collectSelectedImageToWorkingDirectory()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
     private func syncEditorFields() {
         imageNotes = model.selectedImage?.notes ?? ""
         userSentence = model.selectedImage?.classification.user.sentence ?? ""
@@ -688,6 +730,19 @@ struct ContentView: View {
             .orange
         case .unreadable:
             .red
+        }
+    }
+
+    private func generatedOutputSystemImage(for status: GeneratedOutput.Status) -> String {
+        switch status {
+        case .pending:
+            "clock"
+        case .generated:
+            "checkmark.circle"
+        case .failed:
+            "xmark.octagon"
+        case .removed:
+            "minus.circle"
         }
     }
 }

@@ -517,6 +517,64 @@ final class AppModelTests: XCTestCase {
         )
     }
 
+    func testCollectSelectedImageToWorkingDirectoryCopiesFileRecordsOutputAndMarksUnsavedChanges() throws {
+        let directory = try TemporaryDirectory()
+        let sourceURL = directory.url.appendingPathComponent("source/image001.png")
+        let workingURL = directory.url.appendingPathComponent("generated")
+        try FileManager.default.createDirectory(at: sourceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let sourceData = Data([0x89, 0x50, 0x4E, 0x47])
+        try sourceData.write(to: sourceURL)
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let outputID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let generatedAt = Date(timeIntervalSince1970: 1_800_000_700)
+        let ids = DeterministicUUIDGenerator([outputID])
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [
+                    ImageEntry(
+                        id: imageID,
+                        sourcePath: sourceURL.path,
+                        displayName: "image001.png"
+                    )
+                ],
+                workingDirectory: workingURL.path
+            ),
+            selectedImageID: imageID,
+            hasUnsavedChanges: false,
+            idGenerator: ids.next,
+            now: { generatedAt }
+        )
+
+        let output = try model.collectSelectedImageToWorkingDirectory()
+
+        let expectedURL = workingURL.appendingPathComponent("image001.png")
+        XCTAssertEqual(
+            output,
+            GeneratedOutput(
+                id: outputID,
+                path: expectedURL.path,
+                status: .generated,
+                createdAt: generatedAt,
+                settingsId: nil
+            )
+        )
+        XCTAssertEqual(model.workspace.images[0].generatedOutputs, [output])
+        XCTAssertEqual(try Data(contentsOf: expectedURL), sourceData)
+        XCTAssertEqual(try Data(contentsOf: sourceURL), sourceData)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testCollectSelectedImageRequiresSelection() {
+        let model = AppModel(hasUnsavedChanges: false)
+
+        XCTAssertThrowsError(
+            try model.collectSelectedImageToWorkingDirectory()
+        ) { error in
+            XCTAssertEqual(error as? AppModelError, .imageSelectionRequired)
+        }
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
     func testRemoveSelectedImageOnlyUnregistersEntrySelectsNextAvailableImageAndMarksUnsavedChanges() {
         let firstID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let secondID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
@@ -631,7 +689,8 @@ private func workspaceInfo(name: String, workingDirectory: String? = nil) -> Wor
 
 private func workspaceWithImages(
     _ images: [ImageEntry],
-    aiProviders: [AIProviderProfile] = []
+    aiProviders: [AIProviderProfile] = [],
+    workingDirectory: String? = nil
 ) -> WorkspaceDocument {
     WorkspaceDocument(
         workspace: WorkspaceInfo(
@@ -639,7 +698,7 @@ private func workspaceWithImages(
             name: "Dataset",
             createdAt: Date(timeIntervalSince1970: 1_800_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000),
-            workingDirectory: nil
+            workingDirectory: workingDirectory
         ),
         aiProviders: aiProviders,
         images: images

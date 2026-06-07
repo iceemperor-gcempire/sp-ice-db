@@ -15,6 +15,7 @@ public final class AppModel {
     private let classificationLibrary: ClassificationLibrary
     private let aiProviderLibrary: AIProviderLibrary
     private let aiClassificationProvider: any AIClassificationProviding
+    private let generatedImageWorkspace: GeneratedImageWorkspace
     private let workspaceStore: WorkspaceStore
     private let now: () -> Date
 
@@ -43,6 +44,7 @@ public final class AppModel {
         self.classificationLibrary = ClassificationLibrary()
         self.aiProviderLibrary = AIProviderLibrary(idGenerator: idGenerator)
         self.aiClassificationProvider = aiClassificationProvider
+        self.generatedImageWorkspace = GeneratedImageWorkspace(idGenerator: idGenerator, now: now)
         self.workspaceStore = WorkspaceStore(now: now)
         self.now = now
     }
@@ -278,6 +280,17 @@ public final class AppModel {
         if selectedImage?.classification.user != previous {
             hasUnsavedChanges = true
         }
+    }
+
+    @discardableResult
+    public func collectSelectedImageToWorkingDirectory() throws -> GeneratedOutput {
+        let imageID = try requireSelectedImageID()
+        let output = try generatedImageWorkspace.collectSourceImage(
+            imageID: imageID,
+            in: &workspace
+        )
+        hasUnsavedChanges = true
+        return output
     }
 
     public func openWorkspace(from url: URL) throws {
