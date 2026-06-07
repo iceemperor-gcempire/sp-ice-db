@@ -10,7 +10,9 @@ public final class AppModel {
     public var hasUnsavedChanges: Bool
 
     private let imageLibrary: ImageLibrary
+    private let imagePayloadReader: ImagePayloadReader
     private let classificationLibrary: ClassificationLibrary
+    private let aiClassificationProvider: any AIClassificationProviding
     private let workspaceStore: WorkspaceStore
     private let now: () -> Date
 
@@ -21,6 +23,8 @@ public final class AppModel {
         hasUnsavedChanges: Bool = false,
         idGenerator: @escaping () -> UUID = UUID.init,
         imageFileStatusProvider: ImageFileStatusProviding = FileManagerImageFileStatusProvider(),
+        imageFileReader: ImageFileReading = FileManagerImageFileReader(),
+        aiClassificationProvider: any AIClassificationProviding = UnavailableAIClassificationProvider(),
         now: @escaping () -> Date = Date.init
     ) {
         self.workspace = workspace
@@ -31,7 +35,9 @@ public final class AppModel {
             idGenerator: idGenerator,
             fileStatusProvider: imageFileStatusProvider
         )
+        self.imagePayloadReader = ImagePayloadReader(fileReader: imageFileReader)
         self.classificationLibrary = ClassificationLibrary()
+        self.aiClassificationProvider = aiClassificationProvider
         self.workspaceStore = WorkspaceStore(now: now)
         self.now = now
     }
@@ -167,6 +173,30 @@ public final class AppModel {
         hasUnsavedChanges = true
     }
 
+    public func classifySelectedImage(providerID: UUID) throws {
+        let imageID = try requireSelectedImageID()
+        guard let provider = workspace.aiProviders.first(where: { $0.id == providerID }) else {
+            throw AppModelError.aiProviderNotFound
+        }
+        guard let imageIndex = workspace.images.firstIndex(where: { $0.id == imageID }) else {
+            throw AppModelError.imageSelectionRequired
+        }
+
+        let payload = try imagePayloadReader.payload(for: workspace.images[imageIndex])
+        let generatedAt = now()
+        let classification = try aiClassificationProvider.classify(
+            payload: payload,
+            provider: provider,
+            generatedAt: generatedAt
+        )
+        let previous = workspace.images[imageIndex].classification.ai
+
+        workspace.images[imageIndex].classification.ai = classification
+        if previous != classification {
+            hasUnsavedChanges = true
+        }
+    }
+
     public func openWorkspace(from url: URL) throws {
         workspace = try workspaceStore.load(from: url)
         workspaceURL = url
@@ -201,6 +231,8 @@ public final class AppModel {
 public enum AppModelError: Error, Equatable {
     case imageSelectionRequired
     case workspaceURLRequired
+    case aiProviderNotFound
+    case aiClassificationProviderUnavailable
 }
 
 public struct ImageStatusSummary: Equatable {
@@ -212,5 +244,25 @@ public struct ImageStatusSummary: Equatable {
         self.readable = readable
         self.missing = missing
         self.unreadable = unreadable
+    }
+}
+
+public protocol AIClassificationProviding {
+    func classify(
+        payload: ImagePayload,
+        provider: AIProviderProfile,
+        generatedAt: Date?
+    ) throws -> AIClassificationContent
+}
+
+public struct UnavailableAIClassificationProvider: AIClassificationProviding {
+    public init() {}
+
+    public func classify(
+        payload: ImagePayload,
+        provider: AIProviderProfile,
+        generatedAt: Date?
+    ) throws -> AIClassificationContent {
+        throw AppModelError.aiClassificationProviderUnavailable
     }
 }

@@ -162,6 +162,110 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testClassifySelectedImageStoresAIClassificationAndMarksUnsavedChanges() throws {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let generatedAt = Date(timeIntervalSince1970: 1_800_000_500)
+        let classifier = StubAIClassificationProvider(
+            result: AIClassificationContent(
+                sentence: "AI generated caption.",
+                tags: ["portrait", "studio"],
+                providerId: providerID,
+                model: "vision-model",
+                generatedAt: generatedAt
+            )
+        )
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [imageEntry(id: imageID, filename: "image001.png")],
+                aiProviders: [providerProfile(id: providerID)]
+            ),
+            selectedImageID: imageID,
+            hasUnsavedChanges: false,
+            imageFileReader: StubImageFileReader(files: [
+                "/tmp/source/image001.png": Data([0x89, 0x50, 0x4E, 0x47])
+            ]),
+            aiClassificationProvider: classifier,
+            now: { generatedAt }
+        )
+
+        try model.classifySelectedImage(providerID: providerID)
+
+        XCTAssertEqual(
+            model.workspace.images[0].classification.ai,
+            AIClassificationContent(
+                sentence: "AI generated caption.",
+                tags: ["portrait", "studio"],
+                providerId: providerID,
+                model: "vision-model",
+                generatedAt: generatedAt
+            )
+        )
+        XCTAssertEqual(classifier.requests.count, 1)
+        XCTAssertEqual(classifier.requests[0].payload.mimeType, "image/png")
+        XCTAssertEqual(classifier.requests[0].payload.base64, Data([0x89, 0x50, 0x4E, 0x47]).base64EncodedString())
+        XCTAssertEqual(classifier.requests[0].provider.id, providerID)
+        XCTAssertEqual(classifier.requests[0].generatedAt, generatedAt)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testClassifySelectedImageDoesNotMarkUnsavedChangesForEquivalentAIClassification() throws {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let generatedAt = Date(timeIntervalSince1970: 1_800_000_500)
+        let classification = AIClassificationContent(
+            sentence: "AI generated caption.",
+            tags: ["portrait", "studio"],
+            providerId: providerID,
+            model: "vision-model",
+            generatedAt: generatedAt
+        )
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [
+                    imageEntry(
+                        id: imageID,
+                        filename: "image001.png",
+                        classification: Classification(ai: classification)
+                    )
+                ],
+                aiProviders: [providerProfile(id: providerID)]
+            ),
+            selectedImageID: imageID,
+            hasUnsavedChanges: false,
+            imageFileReader: StubImageFileReader(files: [
+                "/tmp/source/image001.png": Data([0x89, 0x50, 0x4E, 0x47])
+            ]),
+            aiClassificationProvider: StubAIClassificationProvider(result: classification),
+            now: { generatedAt }
+        )
+
+        try model.classifySelectedImage(providerID: providerID)
+
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testClassifySelectedImageRequiresSelectionAndProvider() {
+        let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+
+        XCTAssertThrowsError(
+            try AppModel().classifySelectedImage(providerID: providerID)
+        ) { error in
+            XCTAssertEqual(error as? AppModelError, .imageSelectionRequired)
+        }
+
+        let model = AppModel(
+            workspace: workspaceWithImage(id: imageID),
+            selectedImageID: imageID
+        )
+        XCTAssertThrowsError(
+            try model.classifySelectedImage(providerID: providerID)
+        ) { error in
+            XCTAssertEqual(error as? AppModelError, .aiProviderNotFound)
+        }
+    }
+
     func testUpdateSelectedImageNotesTrimsNotesAndMarksUnsavedChanges() throws {
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let model = AppModel(
@@ -377,7 +481,10 @@ private func workspaceInfo(name: String, workingDirectory: String? = nil) -> Wor
     )
 }
 
-private func workspaceWithImages(_ images: [ImageEntry]) -> WorkspaceDocument {
+private func workspaceWithImages(
+    _ images: [ImageEntry],
+    aiProviders: [AIProviderProfile] = []
+) -> WorkspaceDocument {
     WorkspaceDocument(
         workspace: WorkspaceInfo(
             id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
@@ -386,7 +493,20 @@ private func workspaceWithImages(_ images: [ImageEntry]) -> WorkspaceDocument {
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000),
             workingDirectory: nil
         ),
+        aiProviders: aiProviders,
         images: images
+    )
+}
+
+private func providerProfile(id: UUID) -> AIProviderProfile {
+    AIProviderProfile(
+        id: id,
+        name: "Provider",
+        baseURL: URL(string: "https://api.example.com/v1")!,
+        model: "vision-model",
+        apiKeyRef: nil,
+        supportsImageInput: true,
+        timeoutSeconds: 60
     )
 }
 
@@ -410,6 +530,41 @@ private struct StubFileStatusProvider: ImageFileStatusProviding {
 
     func status(forPath path: String) -> ImageFileStatus {
         statuses[path] ?? .missing
+    }
+}
+
+private struct StubImageFileReader: ImageFileReading {
+    var files: [String: Data]
+
+    func readData(atPath path: String) throws -> Data {
+        guard let data = files[path] else {
+            throw ImagePayloadReaderError.fileMissing
+        }
+        return data
+    }
+}
+
+private final class StubAIClassificationProvider: AIClassificationProviding {
+    struct Request: Equatable {
+        var payload: ImagePayload
+        var provider: AIProviderProfile
+        var generatedAt: Date?
+    }
+
+    private let result: AIClassificationContent
+    private(set) var requests: [Request] = []
+
+    init(result: AIClassificationContent) {
+        self.result = result
+    }
+
+    func classify(
+        payload: ImagePayload,
+        provider: AIProviderProfile,
+        generatedAt: Date?
+    ) throws -> AIClassificationContent {
+        requests.append(Request(payload: payload, provider: provider, generatedAt: generatedAt))
+        return result
     }
 }
 
