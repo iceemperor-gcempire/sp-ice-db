@@ -11,6 +11,13 @@ struct ContentView: View {
     @State private var userSentence = ""
     @State private var userTags = ""
     @State private var imageNotes = ""
+    @State private var selectedProviderID: UUID?
+    @State private var providerName = ""
+    @State private var providerBaseURL = ""
+    @State private var providerModel = ""
+    @State private var providerAPIKeyRef = ""
+    @State private var providerSupportsImageInput = true
+    @State private var providerTimeoutSeconds = 60.0
     @State private var errorMessage: String?
 
     private let workspaceContentType = UTType(filenameExtension: "spicedb") ?? .json
@@ -29,6 +36,8 @@ struct ContentView: View {
                     model.newWorkspace()
                     syncWorkspaceFields()
                     syncEditorFields()
+                    selectedProviderID = nil
+                    syncProviderFields()
                 } label: {
                     Label("New Workspace", systemImage: "doc.badge.plus")
                 }
@@ -74,9 +83,14 @@ struct ContentView: View {
         .onChange(of: model.selectedImageID) {
             syncEditorFields()
         }
+        .onChange(of: selectedProviderID) {
+            syncProviderFields()
+        }
         .onAppear {
             syncWorkspaceFields()
             syncEditorFields()
+            selectedProviderID = model.workspace.aiProviders.first?.id
+            syncProviderFields()
         }
         .alert("sp-ice-db", isPresented: errorPresented) {
             Button("OK") {
@@ -182,6 +196,9 @@ struct ContentView: View {
     private var detail: some View {
         VStack(alignment: .leading, spacing: 16) {
             imagePathBar
+            GroupBox("AI Provider") {
+                providerEditor
+            }
 
             if let image = model.selectedImage {
                 metadataEditor(for: image)
@@ -263,6 +280,64 @@ struct ContentView: View {
         }
     }
 
+    private var providerEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Provider", selection: providerSelection) {
+                Text("New Provider").tag(Optional<UUID>.none)
+                ForEach(model.workspace.aiProviders, id: \.id) { provider in
+                    Text(provider.name).tag(Optional(provider.id))
+                }
+            }
+            .pickerStyle(.menu)
+
+            TextField("Name", text: $providerName)
+                .textFieldStyle(.roundedBorder)
+
+            TextField("Base URL", text: $providerBaseURL)
+                .textFieldStyle(.roundedBorder)
+
+            TextField("Model", text: $providerModel)
+                .textFieldStyle(.roundedBorder)
+
+            TextField("API key reference", text: $providerAPIKeyRef)
+                .textFieldStyle(.roundedBorder)
+
+            Toggle("Supports image input", isOn: $providerSupportsImageInput)
+
+            Stepper(
+                value: $providerTimeoutSeconds,
+                in: 5...600,
+                step: 5
+            ) {
+                Text("Timeout \(Int(providerTimeoutSeconds))s")
+            }
+
+            HStack {
+                Button {
+                    saveProvider()
+                } label: {
+                    Label(selectedProviderID == nil ? "Add Provider" : "Update Provider", systemImage: "network")
+                }
+                .disabled(providerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || providerBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || providerModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button {
+                    resetProviderDraft()
+                } label: {
+                    Label("New", systemImage: "plus")
+                }
+
+                Button(role: .destructive) {
+                    removeProvider()
+                } label: {
+                    Label("Remove", systemImage: "trash")
+                }
+                .disabled(selectedProviderID == nil)
+            }
+        }
+    }
+
     @ViewBuilder
     private func imagePreview(for image: ImageEntry) -> some View {
         if model.selectedImageStatus == .readable,
@@ -290,6 +365,13 @@ struct ContentView: View {
                     errorMessage = nil
                 }
             }
+        )
+    }
+
+    private var providerSelection: Binding<UUID?> {
+        Binding(
+            get: { selectedProviderID },
+            set: { selectedProviderID = $0 }
         )
     }
 
@@ -346,6 +428,50 @@ struct ContentView: View {
         syncEditorFields()
     }
 
+    private func saveProvider() {
+        do {
+            if let selectedProviderID {
+                try model.updateAIProvider(
+                    id: selectedProviderID,
+                    name: providerName,
+                    baseURL: providerBaseURL,
+                    model: providerModel,
+                    apiKeyRef: providerAPIKeyRef,
+                    supportsImageInput: providerSupportsImageInput,
+                    timeoutSeconds: providerTimeoutSeconds
+                )
+            } else {
+                let provider = try model.addAIProvider(
+                    name: providerName,
+                    baseURL: providerBaseURL,
+                    model: providerModel,
+                    apiKeyRef: providerAPIKeyRef,
+                    supportsImageInput: providerSupportsImageInput,
+                    timeoutSeconds: providerTimeoutSeconds
+                )
+                selectedProviderID = provider.id
+            }
+            syncProviderFields()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    private func removeProvider() {
+        guard let selectedProviderID else {
+            return
+        }
+
+        _ = model.removeAIProvider(id: selectedProviderID)
+        self.selectedProviderID = model.workspace.aiProviders.first?.id
+        syncProviderFields()
+    }
+
+    private func resetProviderDraft() {
+        selectedProviderID = nil
+        syncProviderFields()
+    }
+
     private func openWorkspace() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [workspaceContentType]
@@ -362,6 +488,8 @@ struct ContentView: View {
             try model.openWorkspace(from: url)
             syncWorkspaceFields()
             syncEditorFields()
+            selectedProviderID = model.workspace.aiProviders.first?.id
+            syncProviderFields()
         } catch {
             errorMessage = String(describing: error)
         }
@@ -437,6 +565,25 @@ struct ContentView: View {
 
     private func syncWorkspaceFields() {
         workspaceNameInput = model.workspace.workspace.name
+    }
+
+    private func syncProviderFields() {
+        guard let provider = model.workspace.aiProviders.first(where: { $0.id == selectedProviderID }) else {
+            providerName = ""
+            providerBaseURL = ""
+            providerModel = ""
+            providerAPIKeyRef = ""
+            providerSupportsImageInput = true
+            providerTimeoutSeconds = 60
+            return
+        }
+
+        providerName = provider.name
+        providerBaseURL = provider.baseURL.absoluteString
+        providerModel = provider.model
+        providerAPIKeyRef = provider.apiKeyRef ?? ""
+        providerSupportsImageInput = provider.supportsImageInput
+        providerTimeoutSeconds = provider.timeoutSeconds
     }
 
     private var selectedImageStatusText: String {
