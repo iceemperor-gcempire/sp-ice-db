@@ -320,6 +320,15 @@ struct ContentView: View {
                     || model.selectedImageID == nil
                     || model.selectedImageStatus != .readable
                     || model.isClassifyingSelectedImage)
+
+                Button {
+                    classifyAllImages()
+                } label: {
+                    Label("Classify Workspace With AI", systemImage: "sparkles.rectangle.stack")
+                }
+                .disabled(selectedProviderID == nil
+                    || model.workspace.images.isEmpty
+                    || model.isClassifyingSelectedImage)
             }
 
             Section("Generated Outputs") {
@@ -802,6 +811,20 @@ struct ContentView: View {
         Task {
             do {
                 try await model.classifySelectedImage(providerID: selectedProviderID)
+            } catch {
+                errorMessage = String(describing: error)
+            }
+        }
+    }
+
+    private func classifyAllImages() {
+        guard let selectedProviderID else {
+            return
+        }
+
+        Task {
+            do {
+                try await model.classifyAllImages(providerID: selectedProviderID)
             } catch {
                 errorMessage = String(describing: error)
             }

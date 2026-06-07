@@ -350,6 +350,38 @@ public final class AppModel {
         }
     }
 
+    @MainActor
+    public func classifyAllImages(providerID: UUID) async throws {
+        guard let provider = workspace.aiProviders.first(where: { $0.id == providerID }) else {
+            throw AppModelError.aiProviderNotFound
+        }
+
+        isClassifyingSelectedImage = true
+        defer {
+            isClassifyingSelectedImage = false
+        }
+
+        var changed = false
+        for imageIndex in workspace.images.indices {
+            let payload = try imagePayloadReader.payload(for: workspace.images[imageIndex])
+            let generatedAt = now()
+            let classification = try await aiClassificationProvider.classify(
+                payload: payload,
+                provider: provider,
+                generatedAt: generatedAt
+            )
+
+            if workspace.images[imageIndex].classification.ai != classification {
+                workspace.images[imageIndex].classification.ai = classification
+                changed = true
+            }
+        }
+
+        if changed {
+            hasUnsavedChanges = true
+        }
+    }
+
     public func promoteSelectedAIClassificationToUser() throws {
         let imageID = try requireSelectedImageID()
         let previous = selectedImage?.classification.user

@@ -462,6 +462,56 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.isClassifyingSelectedImage)
     }
 
+    @MainActor
+    func testClassifyAllImagesStoresAIClassificationForEveryWorkspaceImage() async throws {
+        let firstImageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let secondImageID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let providerID = UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!
+        let generatedAt = Date(timeIntervalSince1970: 1_800_000_600)
+        let provider = StubAIClassificationProvider(
+            result: AIClassificationContent(
+                sentence: "AI generated caption.",
+                tags: ["dataset", "training"],
+                providerId: providerID,
+                model: "vision-model",
+                generatedAt: generatedAt
+            )
+        )
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [
+                    imageEntry(id: firstImageID, filename: "image001.png"),
+                    imageEntry(id: secondImageID, filename: "image002.png")
+                ],
+                aiProviders: [providerProfile(id: providerID)]
+            ),
+            hasUnsavedChanges: false,
+            imageFileReader: StubImageFileReader(files: [
+                "/tmp/source/image001.png": Data([0x89, 0x50, 0x4E, 0x47]),
+                "/tmp/source/image002.png": Data([0x89, 0x50, 0x4E, 0x47])
+            ]),
+            aiClassificationProvider: provider,
+            now: { generatedAt }
+        )
+
+        try await model.classifyAllImages(providerID: providerID)
+
+        XCTAssertEqual(model.workspace.images.map(\.classification.ai?.sentence), [
+            "AI generated caption.",
+            "AI generated caption."
+        ])
+        XCTAssertEqual(model.workspace.images.map(\.classification.ai?.tags), [
+            ["dataset", "training"],
+            ["dataset", "training"]
+        ])
+        XCTAssertEqual(provider.requests.map(\.payload.sourcePath), [
+            "/tmp/source/image001.png",
+            "/tmp/source/image002.png"
+        ])
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertFalse(model.isClassifyingSelectedImage)
+    }
+
     func testUpdateSelectedImageNotesTrimsNotesAndMarksUnsavedChanges() throws {
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let model = AppModel(
