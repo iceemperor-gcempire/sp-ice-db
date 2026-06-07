@@ -57,6 +57,23 @@ public struct DictionaryAPIKeyResolver: APIKeyResolving {
     }
 }
 
+public struct EnvironmentAPIKeyResolver: APIKeyResolving {
+    private let environment: [String: String]
+
+    public init(environment: [String: String] = ProcessInfo.processInfo.environment) {
+        self.environment = environment
+    }
+
+    public func apiKey(for reference: String) throws -> String? {
+        guard reference.hasPrefix("env:") else {
+            return nil
+        }
+
+        let key = String(reference.dropFirst("env:".count))
+        return environment[key]
+    }
+}
+
 public struct URLSessionHTTPTransport: HTTPTransport {
     private let session: URLSession
 

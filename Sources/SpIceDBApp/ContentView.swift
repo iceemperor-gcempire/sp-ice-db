@@ -270,6 +270,40 @@ struct ContentView: View {
                 }
             }
 
+            Section("AI Classification") {
+                if let ai = image.classification.ai {
+                    LabeledContent("Sentence", value: ai.sentence)
+                    LabeledContent("Tags", value: ai.tags.joined(separator: ", "))
+                    LabeledContent("Model", value: ai.model ?? "")
+                    LabeledContent("Generated", value: ai.generatedAt?.formatted() ?? "")
+
+                    Button {
+                        promoteAIClassification()
+                    } label: {
+                        Label("Use As User Classification", systemImage: "arrow.down.doc")
+                    }
+                } else {
+                    ContentUnavailableView(
+                        "No AI Classification",
+                        systemImage: "sparkles",
+                        description: Text("Run classification with the selected provider.")
+                    )
+                }
+
+                Button {
+                    classifySelectedImage()
+                } label: {
+                    Label(
+                        model.isClassifyingSelectedImage ? "Classifying" : "Classify With AI",
+                        systemImage: "sparkles"
+                    )
+                }
+                .disabled(selectedProviderID == nil
+                    || model.selectedImageID == nil
+                    || model.selectedImageStatus != .readable
+                    || model.isClassifyingSelectedImage)
+            }
+
             Section {
                 Button(role: .destructive) {
                     removeSelectedImage()
@@ -551,6 +585,29 @@ struct ContentView: View {
     private func saveUserTags() {
         do {
             try model.updateSelectedUserTags(userTags)
+            syncEditorFields()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    private func classifySelectedImage() {
+        guard let selectedProviderID else {
+            return
+        }
+
+        Task {
+            do {
+                try await model.classifySelectedImage(providerID: selectedProviderID)
+            } catch {
+                errorMessage = String(describing: error)
+            }
+        }
+    }
+
+    private func promoteAIClassification() {
+        do {
+            try model.promoteSelectedAIClassificationToUser()
             syncEditorFields()
         } catch {
             errorMessage = String(describing: error)

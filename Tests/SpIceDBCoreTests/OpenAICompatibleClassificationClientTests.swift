@@ -101,6 +101,16 @@ final class OpenAICompatibleClassificationClientTests: XCTestCase {
             XCTAssertEqual(error as? OpenAICompatibleClassificationClientError, .httpFailure(statusCode: 500))
         }
     }
+
+    func testEnvironmentAPIKeyResolverReadsEnvReferencesOnly() throws {
+        let resolver = EnvironmentAPIKeyResolver(environment: [
+            "OPENAI_API_KEY": "secret-token"
+        ])
+
+        XCTAssertEqual(try resolver.apiKey(for: "env:OPENAI_API_KEY"), "secret-token")
+        XCTAssertNil(try resolver.apiKey(for: "OPENAI_API_KEY"))
+        XCTAssertNil(try resolver.apiKey(for: "env:MISSING"))
+    }
 }
 
 private final class StubHTTPTransport: HTTPTransport {

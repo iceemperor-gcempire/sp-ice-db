@@ -6,7 +6,7 @@ public enum ImagePayloadReaderError: Error, Equatable {
     case unsupportedMimeType
 }
 
-public struct ImagePayload: Equatable {
+public struct ImagePayload: Equatable, Sendable {
     public var sourcePath: String
     public var mimeType: String
     public var base64: String

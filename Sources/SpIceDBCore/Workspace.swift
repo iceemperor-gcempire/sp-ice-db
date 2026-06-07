@@ -52,7 +52,7 @@ public struct WorkspaceInfo: Codable, Equatable {
     }
 }
 
-public struct AIProviderProfile: Codable, Equatable {
+public struct AIProviderProfile: Codable, Equatable, Sendable {
     public var id: UUID
     public var name: String
     public var baseURL: URL
@@ -128,7 +128,7 @@ public struct ClassificationContent: Codable, Equatable {
     }
 }
 
-public struct AIClassificationContent: Codable, Equatable {
+public struct AIClassificationContent: Codable, Equatable, Sendable {
     public var sentence: String
     public var tags: [String]
     public var providerId: UUID?
@@ -264,4 +264,3 @@ public enum WorkspaceJSONCodec {
         return try decoder.decode(WorkspaceDocument.self, from: data)
     }
 }
-

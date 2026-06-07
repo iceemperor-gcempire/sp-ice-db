@@ -238,7 +238,8 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
-    func testClassifySelectedImageStoresAIClassificationAndMarksUnsavedChanges() throws {
+    @MainActor
+    func testClassifySelectedImageStoresAIClassificationAndMarksUnsavedChanges() async throws {
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
         let generatedAt = Date(timeIntervalSince1970: 1_800_000_500)
@@ -265,7 +266,7 @@ final class AppModelTests: XCTestCase {
             now: { generatedAt }
         )
 
-        try model.classifySelectedImage(providerID: providerID)
+        try await model.classifySelectedImage(providerID: providerID)
 
         XCTAssertEqual(
             model.workspace.images[0].classification.ai,
@@ -283,9 +284,11 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(classifier.requests[0].provider.id, providerID)
         XCTAssertEqual(classifier.requests[0].generatedAt, generatedAt)
         XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertFalse(model.isClassifyingSelectedImage)
     }
 
-    func testClassifySelectedImageDoesNotMarkUnsavedChangesForEquivalentAIClassification() throws {
+    @MainActor
+    func testClassifySelectedImageDoesNotMarkUnsavedChangesForEquivalentAIClassification() async throws {
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
         let generatedAt = Date(timeIntervalSince1970: 1_800_000_500)
@@ -316,17 +319,19 @@ final class AppModelTests: XCTestCase {
             now: { generatedAt }
         )
 
-        try model.classifySelectedImage(providerID: providerID)
+        try await model.classifySelectedImage(providerID: providerID)
 
         XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertFalse(model.isClassifyingSelectedImage)
     }
 
-    func testClassifySelectedImageRequiresSelectionAndProvider() {
+    @MainActor
+    func testClassifySelectedImageRequiresSelectionAndProvider() async {
         let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
 
-        XCTAssertThrowsError(
-            try AppModel().classifySelectedImage(providerID: providerID)
+        await XCTAssertThrowsErrorAsync(
+            try await AppModel().classifySelectedImage(providerID: providerID)
         ) { error in
             XCTAssertEqual(error as? AppModelError, .imageSelectionRequired)
         }
@@ -335,11 +340,78 @@ final class AppModelTests: XCTestCase {
             workspace: workspaceWithImage(id: imageID),
             selectedImageID: imageID
         )
-        XCTAssertThrowsError(
-            try model.classifySelectedImage(providerID: providerID)
+        await XCTAssertThrowsErrorAsync(
+            try await model.classifySelectedImage(providerID: providerID)
         ) { error in
             XCTAssertEqual(error as? AppModelError, .aiProviderNotFound)
         }
+    }
+
+    func testPromoteSelectedAIClassificationToUserMarksUnsavedChangesOnlyWhenChanged() throws {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let model = AppModel(
+            workspace: workspaceWithImages([
+                imageEntry(
+                    id: imageID,
+                    filename: "image001.png",
+                    classification: Classification(
+                        user: ClassificationContent(sentence: "Old.", tags: ["old"]),
+                        ai: AIClassificationContent(sentence: "AI caption.", tags: ["ai", "tag"])
+                    )
+                )
+            ]),
+            selectedImageID: imageID,
+            hasUnsavedChanges: false
+        )
+
+        try model.promoteSelectedAIClassificationToUser()
+
+        XCTAssertEqual(
+            model.workspace.images[0].classification.user,
+            ClassificationContent(sentence: "AI caption.", tags: ["ai", "tag"])
+        )
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        model.hasUnsavedChanges = false
+        try model.promoteSelectedAIClassificationToUser()
+
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    @MainActor
+    func testClassifySelectedImageSetsRunningStateDuringProviderCall() async throws {
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let generatedAt = Date(timeIntervalSince1970: 1_800_000_500)
+        let probe = RunningStateProbe()
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [imageEntry(id: imageID, filename: "image001.png")],
+                aiProviders: [providerProfile(id: providerID)]
+            ),
+            selectedImageID: imageID,
+            imageFileReader: StubImageFileReader(files: [
+                "/tmp/source/image001.png": Data([0x89, 0x50, 0x4E, 0x47])
+            ]),
+            aiClassificationProvider: StubAIClassificationProvider(
+                result: AIClassificationContent(
+                    sentence: "AI generated caption.",
+                    tags: ["portrait"],
+                    providerId: providerID,
+                    model: "vision-model",
+                    generatedAt: generatedAt
+                ),
+                onClassify: { probe.check() }
+            ),
+            now: { generatedAt }
+        )
+        probe.check = {
+            XCTAssertTrue(model.isClassifyingSelectedImage)
+        }
+
+        try await model.classifySelectedImage(providerID: providerID)
+
+        XCTAssertFalse(model.isClassifyingSelectedImage)
     }
 
     func testUpdateSelectedImageNotesTrimsNotesAndMarksUnsavedChanges() throws {
@@ -620,7 +692,7 @@ private struct StubImageFileReader: ImageFileReading {
     }
 }
 
-private final class StubAIClassificationProvider: AIClassificationProviding {
+private final class StubAIClassificationProvider: AIClassificationProviding, @unchecked Sendable {
     struct Request: Equatable {
         var payload: ImagePayload
         var provider: AIProviderProfile
@@ -628,19 +700,41 @@ private final class StubAIClassificationProvider: AIClassificationProviding {
     }
 
     private let result: AIClassificationContent
+    private let onClassify: @Sendable () -> Void
     private(set) var requests: [Request] = []
 
-    init(result: AIClassificationContent) {
+    init(result: AIClassificationContent, onClassify: @escaping @Sendable () -> Void = {}) {
         self.result = result
+        self.onClassify = onClassify
     }
 
     func classify(
         payload: ImagePayload,
         provider: AIProviderProfile,
         generatedAt: Date?
-    ) throws -> AIClassificationContent {
+    ) async throws -> AIClassificationContent {
+        onClassify()
         requests.append(Request(payload: payload, provider: provider, generatedAt: generatedAt))
         return result
+    }
+}
+
+private final class RunningStateProbe: @unchecked Sendable {
+    var check: () -> Void = {}
+}
+
+@MainActor
+private func XCTAssertThrowsErrorAsync<T>(
+    _ expression: @autoclosure () async throws -> T,
+    _ errorHandler: (Error) -> Void,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) async {
+    do {
+        _ = try await expression()
+        XCTFail("Expected error", file: file, line: line)
+    } catch {
+        errorHandler(error)
     }
 }
 

@@ -8,6 +8,7 @@ public final class AppModel {
     public var selectedImageID: UUID?
     public var workspaceURL: URL?
     public var hasUnsavedChanges: Bool
+    public var isClassifyingSelectedImage: Bool
 
     private let imageLibrary: ImageLibrary
     private let imagePayloadReader: ImagePayloadReader
@@ -22,16 +23,18 @@ public final class AppModel {
         selectedImageID: UUID? = nil,
         workspaceURL: URL? = nil,
         hasUnsavedChanges: Bool = false,
+        isClassifyingSelectedImage: Bool = false,
         idGenerator: @escaping () -> UUID = UUID.init,
         imageFileStatusProvider: ImageFileStatusProviding = FileManagerImageFileStatusProvider(),
         imageFileReader: ImageFileReading = FileManagerImageFileReader(),
-        aiClassificationProvider: any AIClassificationProviding = UnavailableAIClassificationProvider(),
+        aiClassificationProvider: any AIClassificationProviding = OpenAICompatibleAIClassificationProvider(),
         now: @escaping () -> Date = Date.init
     ) {
         self.workspace = workspace
         self.selectedImageID = selectedImageID
         self.workspaceURL = workspaceURL
         self.hasUnsavedChanges = hasUnsavedChanges
+        self.isClassifyingSelectedImage = isClassifyingSelectedImage
         self.imageLibrary = ImageLibrary(
             idGenerator: idGenerator,
             fileStatusProvider: imageFileStatusProvider
@@ -82,6 +85,7 @@ public final class AppModel {
         selectedImageID = nil
         workspaceURL = nil
         hasUnsavedChanges = false
+        isClassifyingSelectedImage = false
     }
 
     public func updateWorkspaceName(_ name: String) {
@@ -238,7 +242,8 @@ public final class AppModel {
         hasUnsavedChanges = true
     }
 
-    public func classifySelectedImage(providerID: UUID) throws {
+    @MainActor
+    public func classifySelectedImage(providerID: UUID) async throws {
         let imageID = try requireSelectedImageID()
         guard let provider = workspace.aiProviders.first(where: { $0.id == providerID }) else {
             throw AppModelError.aiProviderNotFound
@@ -249,7 +254,11 @@ public final class AppModel {
 
         let payload = try imagePayloadReader.payload(for: workspace.images[imageIndex])
         let generatedAt = now()
-        let classification = try aiClassificationProvider.classify(
+        isClassifyingSelectedImage = true
+        defer {
+            isClassifyingSelectedImage = false
+        }
+        let classification = try await aiClassificationProvider.classify(
             payload: payload,
             provider: provider,
             generatedAt: generatedAt
@@ -258,6 +267,15 @@ public final class AppModel {
 
         workspace.images[imageIndex].classification.ai = classification
         if previous != classification {
+            hasUnsavedChanges = true
+        }
+    }
+
+    public func promoteSelectedAIClassificationToUser() throws {
+        let imageID = try requireSelectedImageID()
+        let previous = selectedImage?.classification.user
+        try classificationLibrary.promoteAIClassificationToUser(forImageID: imageID, in: &workspace)
+        if selectedImage?.classification.user != previous {
             hasUnsavedChanges = true
         }
     }
@@ -312,12 +330,12 @@ public struct ImageStatusSummary: Equatable {
     }
 }
 
-public protocol AIClassificationProviding {
+public protocol AIClassificationProviding: Sendable {
     func classify(
         payload: ImagePayload,
         provider: AIProviderProfile,
         generatedAt: Date?
-    ) throws -> AIClassificationContent
+    ) async throws -> AIClassificationContent
 }
 
 public struct UnavailableAIClassificationProvider: AIClassificationProviding {
@@ -327,7 +345,33 @@ public struct UnavailableAIClassificationProvider: AIClassificationProviding {
         payload: ImagePayload,
         provider: AIProviderProfile,
         generatedAt: Date?
-    ) throws -> AIClassificationContent {
+    ) async throws -> AIClassificationContent {
         throw AppModelError.aiClassificationProviderUnavailable
+    }
+}
+
+public struct OpenAICompatibleAIClassificationProvider: AIClassificationProviding, @unchecked Sendable {
+    private let client: OpenAICompatibleClassificationClient
+
+    public init(
+        apiKeyResolver: APIKeyResolving = EnvironmentAPIKeyResolver(),
+        transport: HTTPTransport = URLSessionHTTPTransport()
+    ) {
+        self.client = OpenAICompatibleClassificationClient(
+            apiKeyResolver: apiKeyResolver,
+            transport: transport
+        )
+    }
+
+    public func classify(
+        payload: ImagePayload,
+        provider: AIProviderProfile,
+        generatedAt: Date?
+    ) async throws -> AIClassificationContent {
+        try await client.classify(
+            payload: payload,
+            provider: provider,
+            generatedAt: generatedAt
+        )
     }
 }
