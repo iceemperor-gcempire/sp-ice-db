@@ -12,6 +12,7 @@ public final class AppModel {
     private let imageLibrary: ImageLibrary
     private let imagePayloadReader: ImagePayloadReader
     private let classificationLibrary: ClassificationLibrary
+    private let aiProviderLibrary: AIProviderLibrary
     private let aiClassificationProvider: any AIClassificationProviding
     private let workspaceStore: WorkspaceStore
     private let now: () -> Date
@@ -37,6 +38,7 @@ public final class AppModel {
         )
         self.imagePayloadReader = ImagePayloadReader(fileReader: imageFileReader)
         self.classificationLibrary = ClassificationLibrary()
+        self.aiProviderLibrary = AIProviderLibrary(idGenerator: idGenerator)
         self.aiClassificationProvider = aiClassificationProvider
         self.workspaceStore = WorkspaceStore(now: now)
         self.now = now
@@ -101,6 +103,69 @@ public final class AppModel {
 
         workspace.workspace.workingDirectory = workingDirectory
         hasUnsavedChanges = true
+    }
+
+    @discardableResult
+    public func addAIProvider(
+        name: String,
+        baseURL: String,
+        model: String,
+        apiKeyRef: String?,
+        supportsImageInput: Bool = true,
+        timeoutSeconds: TimeInterval = 60,
+        customHeaders: [String: String] = [:]
+    ) throws -> AIProviderProfile {
+        let provider = try aiProviderLibrary.addProvider(
+            name: name,
+            baseURL: baseURL,
+            model: model,
+            apiKeyRef: apiKeyRef,
+            supportsImageInput: supportsImageInput,
+            timeoutSeconds: timeoutSeconds,
+            customHeaders: customHeaders,
+            to: &workspace
+        )
+        hasUnsavedChanges = true
+        return provider
+    }
+
+    @discardableResult
+    public func updateAIProvider(
+        id: UUID,
+        name: String,
+        baseURL: String,
+        model: String,
+        apiKeyRef: String?,
+        supportsImageInput: Bool = true,
+        timeoutSeconds: TimeInterval = 60,
+        customHeaders: [String: String] = [:]
+    ) throws -> AIProviderProfile {
+        let previous = workspace.aiProviders.first(where: { $0.id == id })
+        let provider = try aiProviderLibrary.updateProvider(
+            id: id,
+            name: name,
+            baseURL: baseURL,
+            model: model,
+            apiKeyRef: apiKeyRef,
+            supportsImageInput: supportsImageInput,
+            timeoutSeconds: timeoutSeconds,
+            customHeaders: customHeaders,
+            in: &workspace
+        )
+        if previous != provider {
+            hasUnsavedChanges = true
+        }
+        return provider
+    }
+
+    @discardableResult
+    public func removeAIProvider(id: UUID) -> AIProviderProfile? {
+        guard let removed = aiProviderLibrary.removeProvider(id: id, from: &workspace) else {
+            return nil
+        }
+
+        hasUnsavedChanges = true
+        return removed
     }
 
     @discardableResult

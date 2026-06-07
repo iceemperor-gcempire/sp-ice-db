@@ -59,6 +59,82 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.hasUnsavedChanges)
     }
 
+    func testAddAIProviderStoresProfileSelectsNoImageAndMarksUnsavedChanges() throws {
+        let ids = DeterministicUUIDGenerator([
+            UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        ])
+        let model = AppModel(
+            hasUnsavedChanges: false,
+            idGenerator: ids.next
+        )
+
+        let provider = try model.addAIProvider(
+            name: " OpenAI Compatible ",
+            baseURL: " https://api.example.com/v1 ",
+            model: " vision-model ",
+            apiKeyRef: " keychain:sp-ice-db/provider "
+        )
+
+        XCTAssertEqual(model.workspace.aiProviders, [provider])
+        XCTAssertEqual(provider.id, UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!)
+        XCTAssertEqual(provider.name, "OpenAI Compatible")
+        XCTAssertEqual(provider.baseURL, URL(string: "https://api.example.com/v1")!)
+        XCTAssertEqual(provider.model, "vision-model")
+        XCTAssertEqual(provider.apiKeyRef, "keychain:sp-ice-db/provider")
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testUpdateAIProviderReplacesExistingProfileAndMarksUnsavedChangesOnlyWhenChanged() throws {
+        let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let model = AppModel(
+            workspace: workspaceWithImages([], aiProviders: [providerProfile(id: providerID)]),
+            hasUnsavedChanges: false
+        )
+
+        try model.updateAIProvider(
+            id: providerID,
+            name: " Provider ",
+            baseURL: " https://api.example.com/v1 ",
+            model: " vision-model ",
+            apiKeyRef: nil
+        )
+
+        XCTAssertFalse(model.hasUnsavedChanges)
+
+        let updated = try model.updateAIProvider(
+            id: providerID,
+            name: "Updated",
+            baseURL: "https://api.updated.example/v1",
+            model: "updated-model",
+            apiKeyRef: nil,
+            supportsImageInput: false,
+            timeoutSeconds: 30
+        )
+
+        XCTAssertEqual(model.workspace.aiProviders, [updated])
+        XCTAssertEqual(updated.name, "Updated")
+        XCTAssertEqual(updated.baseURL, URL(string: "https://api.updated.example/v1")!)
+        XCTAssertEqual(updated.model, "updated-model")
+        XCTAssertFalse(updated.supportsImageInput)
+        XCTAssertEqual(updated.timeoutSeconds, 30)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testRemoveAIProviderDeletesProfileReferenceOnlyAndMarksUnsavedChanges() {
+        let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let model = AppModel(
+            workspace: workspaceWithImages([], aiProviders: [providerProfile(id: providerID)]),
+            hasUnsavedChanges: false
+        )
+
+        let removed = model.removeAIProvider(id: providerID)
+
+        XCTAssertEqual(removed?.id, providerID)
+        XCTAssertTrue(model.workspace.aiProviders.isEmpty)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertNil(model.removeAIProvider(id: providerID))
+    }
+
     func testAddImageSelectsNewEntryAndMarksUnsavedChanges() throws {
         let ids = DeterministicUUIDGenerator([
             UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
