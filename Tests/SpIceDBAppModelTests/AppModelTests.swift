@@ -575,6 +575,79 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testExportDatasetCaptionsWritesSidecarFilesStoresReportAndDoesNotMarkUnsavedChanges() throws {
+        let directory = try TemporaryDirectory()
+        let outputURL = directory.url.appendingPathComponent("generated/image001.png")
+        try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([1]).write(to: outputURL)
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let outputID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let model = AppModel(
+            workspace: workspaceWithImages([
+                ImageEntry(
+                    id: imageID,
+                    sourcePath: directory.url.appendingPathComponent("source.png").path,
+                    displayName: "source.png",
+                    classification: Classification(
+                        user: ClassificationContent(
+                            sentence: "A polished silver spoon.",
+                            tags: ["silver spoon", "tabletop"]
+                        )
+                    ),
+                    generatedOutputs: [
+                        GeneratedOutput(
+                            id: outputID,
+                            path: outputURL.path,
+                            status: .generated,
+                            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+                            settingsId: nil
+                        )
+                    ]
+                )
+            ]),
+            hasUnsavedChanges: false
+        )
+
+        let report = try model.exportDatasetCaptions(
+            options: DatasetExportOptions(
+                metadataSource: .user,
+                captionFormat: .tags
+            )
+        )
+
+        let captionURL = outputURL.deletingPathExtension().appendingPathExtension("txt")
+        XCTAssertEqual(report.writtenCaptionPaths, [captionURL.path])
+        XCTAssertEqual(model.latestDatasetExportReport, report)
+        XCTAssertEqual(try String(contentsOf: captionURL, encoding: .utf8), "silver spoon, tabletop\n")
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testNewAndOpenWorkspaceClearLatestDatasetExportReport() throws {
+        let directory = try TemporaryDirectory()
+        let fileURL = directory.url.appendingPathComponent("dataset.spicedb")
+        var document = workspaceWithImage(id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!)
+        try WorkspaceStore(now: { Date(timeIntervalSince1970: 1_800_000_100) }).save(&document, to: fileURL)
+        let model = AppModel()
+        model.latestDatasetExportReport = DatasetExportReport(
+            issues: [
+                .captionMissing(
+                    imageID: UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!,
+                    outputID: UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!
+                )
+            ]
+        )
+
+        model.newWorkspace()
+
+        XCTAssertNil(model.latestDatasetExportReport)
+
+        model.latestDatasetExportReport = DatasetExportReport(writtenCaptionPaths: ["/tmp/image001.txt"])
+
+        try model.openWorkspace(from: fileURL)
+
+        XCTAssertNil(model.latestDatasetExportReport)
+    }
+
     func testRemoveSelectedImageOnlyUnregistersEntrySelectsNextAvailableImageAndMarksUnsavedChanges() {
         let firstID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let secondID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!

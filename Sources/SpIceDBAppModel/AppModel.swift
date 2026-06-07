@@ -9,6 +9,7 @@ public final class AppModel {
     public var workspaceURL: URL?
     public var hasUnsavedChanges: Bool
     public var isClassifyingSelectedImage: Bool
+    public var latestDatasetExportReport: DatasetExportReport?
 
     private let imageLibrary: ImageLibrary
     private let imagePayloadReader: ImagePayloadReader
@@ -16,6 +17,7 @@ public final class AppModel {
     private let aiProviderLibrary: AIProviderLibrary
     private let aiClassificationProvider: any AIClassificationProviding
     private let generatedImageWorkspace: GeneratedImageWorkspace
+    private let datasetExporter: DatasetExporter
     private let workspaceStore: WorkspaceStore
     private let now: () -> Date
 
@@ -45,6 +47,7 @@ public final class AppModel {
         self.aiProviderLibrary = AIProviderLibrary(idGenerator: idGenerator)
         self.aiClassificationProvider = aiClassificationProvider
         self.generatedImageWorkspace = GeneratedImageWorkspace(idGenerator: idGenerator, now: now)
+        self.datasetExporter = DatasetExporter()
         self.workspaceStore = WorkspaceStore(now: now)
         self.now = now
     }
@@ -88,6 +91,7 @@ public final class AppModel {
         workspaceURL = nil
         hasUnsavedChanges = false
         isClassifyingSelectedImage = false
+        latestDatasetExportReport = nil
     }
 
     public func updateWorkspaceName(_ name: String) {
@@ -293,11 +297,19 @@ public final class AppModel {
         return output
     }
 
+    @discardableResult
+    public func exportDatasetCaptions(options: DatasetExportOptions) throws -> DatasetExportReport {
+        let report = try datasetExporter.exportCaptions(from: workspace, options: options)
+        latestDatasetExportReport = report
+        return report
+    }
+
     public func openWorkspace(from url: URL) throws {
         workspace = try workspaceStore.load(from: url)
         workspaceURL = url
         selectedImageID = workspace.images.first?.id
         hasUnsavedChanges = false
+        latestDatasetExportReport = nil
     }
 
     public func saveWorkspace(to url: URL? = nil) throws {
