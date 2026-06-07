@@ -338,6 +338,20 @@ struct ContentView: View {
                 .disabled(model.selectedImageID == nil
                     || model.workspace.workspace.workingDirectory == nil
                     || model.selectedImageStatus != .readable)
+
+                Button {
+                    generateSelectedImage()
+                } label: {
+                    Label(
+                        model.isGeneratingSelectedImage ? "Generating" : "Generate With AI",
+                        systemImage: "wand.and.stars"
+                    )
+                }
+                .disabled(selectedProviderID == nil
+                    || model.selectedImageID == nil
+                    || model.workspace.workspace.workingDirectory == nil
+                    || model.selectedImageStatus != .readable
+                    || model.isGeneratingSelectedImage)
             }
 
             Section("Dataset Export") {
@@ -681,6 +695,20 @@ struct ContentView: View {
             try model.collectSelectedImageToWorkingDirectory()
         } catch {
             errorMessage = String(describing: error)
+        }
+    }
+
+    private func generateSelectedImage() {
+        guard let selectedProviderID else {
+            return
+        }
+
+        Task {
+            do {
+                try await model.generateSelectedImage(providerID: selectedProviderID)
+            } catch {
+                errorMessage = String(describing: error)
+            }
         }
     }
 

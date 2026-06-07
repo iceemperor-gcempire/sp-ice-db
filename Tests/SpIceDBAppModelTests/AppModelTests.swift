@@ -631,6 +631,46 @@ final class AppModelTests: XCTestCase {
     }
 
     @MainActor
+    func testGenerateSelectedImageUsesProviderFactoryWhenProviderIDIsProvided() async throws {
+        let directory = try TemporaryDirectory()
+        let sourceURL = directory.url.appendingPathComponent("source/image001.png")
+        let workingURL = directory.url.appendingPathComponent("generated")
+        try FileManager.default.createDirectory(at: sourceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([1]).write(to: sourceURL)
+        let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let providerID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let imageGenerationProvider = StubImageGenerationProvider(
+            asset: GeneratedImageAsset(data: Data([2]), suggestedFilename: "provider-output.png")
+        )
+        var factoryProvider: AIProviderProfile?
+        let model = AppModel(
+            workspace: workspaceWithImages(
+                [
+                    ImageEntry(
+                        id: imageID,
+                        sourcePath: sourceURL.path,
+                        displayName: "image001.png"
+                    )
+                ],
+                aiProviders: [providerProfile(id: providerID)],
+                workingDirectory: workingURL.path
+            ),
+            selectedImageID: imageID,
+            imageGenerationProviderFactory: { provider in
+                factoryProvider = provider
+                return imageGenerationProvider
+            }
+        )
+
+        let output = try await model.generateSelectedImage(providerID: providerID)
+
+        XCTAssertEqual(factoryProvider?.id, providerID)
+        XCTAssertEqual(output.path, workingURL.appendingPathComponent("provider-output.png").path)
+        XCTAssertEqual(imageGenerationProvider.requests.map(\.sourcePath), [sourceURL.path])
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    @MainActor
     func testGenerateSelectedImageSetsRunningStateDuringProviderCall() async throws {
         let directory = try TemporaryDirectory()
         let sourceURL = directory.url.appendingPathComponent("source/image001.png")

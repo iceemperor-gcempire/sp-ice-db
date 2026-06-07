@@ -19,8 +19,10 @@ public final class AppModel {
     private let aiClassificationProvider: any AIClassificationProviding
     private let generatedImageWorkspace: GeneratedImageWorkspace
     private let imageGenerationRunner: ImageGenerationRunner
+    private let imageGenerationProviderFactory: (AIProviderProfile) -> any ImageGenerationProviding
     private let datasetExporter: DatasetExporter
     private let workspaceStore: WorkspaceStore
+    private let idGenerator: () -> UUID
     private let now: () -> Date
 
     public init(
@@ -35,6 +37,15 @@ public final class AppModel {
         imageFileReader: ImageFileReading = FileManagerImageFileReader(),
         aiClassificationProvider: any AIClassificationProviding = OpenAICompatibleAIClassificationProvider(),
         imageGenerationProvider: any ImageGenerationProviding = UnavailableImageGenerationProvider(),
+        imageGenerationProviderFactory: @escaping (AIProviderProfile) -> any ImageGenerationProviding = { provider in
+            OpenAICompatibleImageGenerationProvider(
+                provider: provider,
+                client: OpenAICompatibleImageGenerationClient(
+                    apiKeyResolver: EnvironmentAPIKeyResolver(),
+                    transport: URLSessionHTTPTransport()
+                )
+            )
+        },
         now: @escaping () -> Date = Date.init
     ) {
         self.workspace = workspace
@@ -57,8 +68,10 @@ public final class AppModel {
             idGenerator: idGenerator,
             now: now
         )
+        self.imageGenerationProviderFactory = imageGenerationProviderFactory
         self.datasetExporter = DatasetExporter()
         self.workspaceStore = WorkspaceStore(now: now)
+        self.idGenerator = idGenerator
         self.now = now
     }
 
@@ -310,14 +323,18 @@ public final class AppModel {
 
     @MainActor
     @discardableResult
-    public func generateSelectedImage(settingsID: UUID? = nil) async throws -> GeneratedOutput {
+    public func generateSelectedImage(
+        providerID: UUID? = nil,
+        settingsID: UUID? = nil
+    ) async throws -> GeneratedOutput {
         let imageID = try requireSelectedImageID()
         isGeneratingSelectedImage = true
         defer {
             isGeneratingSelectedImage = false
         }
         var document = workspace
-        let output = try await imageGenerationRunner.generateImage(
+        let runner = try imageGenerationRunner(for: providerID)
+        let output = try await runner.generateImage(
             imageID: imageID,
             settingsID: settingsID,
             in: &document
@@ -325,6 +342,22 @@ public final class AppModel {
         workspace = document
         hasUnsavedChanges = true
         return output
+    }
+
+    private func imageGenerationRunner(for providerID: UUID?) throws -> ImageGenerationRunner {
+        guard let providerID else {
+            return imageGenerationRunner
+        }
+
+        guard let provider = workspace.aiProviders.first(where: { $0.id == providerID }) else {
+            throw AppModelError.aiProviderNotFound
+        }
+
+        return ImageGenerationRunner(
+            provider: imageGenerationProviderFactory(provider),
+            idGenerator: idGenerator,
+            now: now
+        )
     }
 
     @discardableResult
