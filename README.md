@@ -17,6 +17,7 @@ sp-ice-db is a macOS application project for managing image source paths, prepar
 
 - [Product Requirements](docs/product-requirements.md)
 - [Workspace Format Draft](docs/workspace-format.md)
+- [Implementation Status](docs/implementation-status.md)
 
 ## Development
 
