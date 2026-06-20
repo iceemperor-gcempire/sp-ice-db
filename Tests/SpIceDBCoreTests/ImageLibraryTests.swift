@@ -96,6 +96,27 @@ final class ImageLibraryTests: XCTestCase {
         XCTAssertEqual(provider.status(forPath: directory.appendingPathComponent("missing.png").path), .missing)
     }
 
+    func testDefaultImageFileMetadataProviderReadsModificationDateAndFileSize() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sp-ice-db-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let file = directory.appendingPathComponent("source.png")
+        let data = Data([0x89, 0x50, 0x4E, 0x47])
+        try data.write(to: file)
+        let modifiedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        try FileManager.default.setAttributes([.modificationDate: modifiedAt], ofItemAtPath: file.path)
+        let provider = FileManagerImageFileMetadataProvider()
+
+        let metadata = provider.metadata(forPath: file.path)
+
+        XCTAssertEqual(metadata, ImageFileMetadata(modifiedAt: modifiedAt, fileSizeBytes: Int64(data.count)))
+        XCTAssertNil(provider.metadata(forPath: directory.appendingPathComponent("missing.png").path))
+    }
+
     func testAddingEmptyPathThrows() {
         var document = WorkspaceDocument.new(name: "Library")
         let library = ImageLibrary()

@@ -7,7 +7,6 @@ import SpIceDBCore
 struct ContentView: View {
     @Bindable var model: AppModel
     @State private var imagePathInput = ""
-    @State private var sourceFolderRecursive = true
     @State private var workspaceNameInput = ""
     @State private var userSentence = ""
     @State private var userTags = ""
@@ -75,12 +74,6 @@ struct ContentView: View {
                     chooseImageFile()
                 } label: {
                     Label("Choose Image", systemImage: "photo")
-                }
-
-                Button {
-                    chooseSourceFolder()
-                } label: {
-                    Label("Add Source Folder", systemImage: "folder.badge.plus")
                 }
 
                 Button {
@@ -178,29 +171,7 @@ struct ContentView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 8)
 
-            sourceFolderSection
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-
-            List(selection: $model.selectedImageID) {
-                ForEach(model.workspace.images, id: \.id) { image in
-                    HStack(spacing: 8) {
-                        Image(systemName: imageStatusSystemImage(for: model.imageStatus(for: image)))
-                            .foregroundStyle(imageStatusColor(for: model.imageStatus(for: image)))
-                            .frame(width: 16)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(image.displayName ?? image.sourcePath)
-                                .lineLimit(1)
-                            Text(image.sourcePath)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    .tag(image.id)
-                }
-            }
+            imageTable
         }
     }
 
@@ -219,91 +190,32 @@ struct ContentView: View {
         .font(.caption)
     }
 
-    private var sourceFolderSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Source Folders")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Toggle("Recursive", isOn: $sourceFolderRecursive)
-                    .font(.caption)
-                    .toggleStyle(.checkbox)
-
-                Button {
-                    chooseSourceFolder()
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                }
-                .buttonStyle(.borderless)
-                .help("Add source folder")
-
-                Button {
-                    scanAllSourceFolders()
-                } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                }
-                .buttonStyle(.borderless)
-                .disabled(model.workspace.sourceFolders.isEmpty)
-                .help("Scan all source folders")
-            }
-
-            if model.workspace.sourceFolders.isEmpty {
-                Text("No source folders")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(spacing: 4) {
-                    ForEach(model.workspace.sourceFolders, id: \.id) { folder in
-                        sourceFolderRow(folder)
-                    }
-                }
-            }
-        }
-    }
-
-    private func sourceFolderRow(_ folder: SourceFolder) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: folder.recursive ? "folder.fill.badge.gearshape" : "folder.fill")
-                .foregroundStyle(.secondary)
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(folder.displayName ?? folder.path)
-                    .font(.caption)
-                    .lineLimit(1)
+    private var imageTable: some View {
+        Table(model.workspace.images, selection: $model.selectedImageID) {
+            TableColumn("Location") { image in
                 HStack(spacing: 6) {
-                    Text(folder.path)
+                    Image(systemName: imageStatusSystemImage(for: model.imageStatus(for: image)))
+                        .foregroundStyle(imageStatusColor(for: model.imageStatus(for: image)))
+                        .frame(width: 14)
+                    Text(locationPath(for: image))
                         .lineLimit(1)
-                    if let lastScannedAt = folder.lastScannedAt {
-                        Text(lastScannedAt, style: .relative)
-                    }
                 }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
             }
+            .width(min: 180, ideal: 280)
 
-            Spacer()
-
-            Button {
-                scanSourceFolder(folder)
-            } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
+            TableColumn("File") { image in
+                Text(image.displayName ?? URL(fileURLWithPath: image.sourcePath).lastPathComponent)
+                    .lineLimit(1)
             }
-            .buttonStyle(.borderless)
-            .help("Scan folder")
+            .width(min: 120, ideal: 180)
 
-            Button(role: .destructive) {
-                removeSourceFolder(folder)
-            } label: {
-                Image(systemName: "xmark.circle")
+            TableColumn("Modified / Size") { image in
+                Text(metadataSummary(for: image))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .buttonStyle(.borderless)
-            .help("Remove source folder")
+            .width(min: 150, ideal: 180)
         }
-        .padding(.vertical, 3)
     }
 
     private var detail: some View {
@@ -709,28 +621,6 @@ struct ContentView: View {
         }
     }
 
-    private func chooseSourceFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = true
-        panel.message = "Choose source folders to scan for image references."
-
-        guard panel.runModal() == .OK else {
-            return
-        }
-
-        do {
-            for url in panel.urls {
-                let folder = try model.addSourceFolder(path: url.path, recursive: sourceFolderRecursive)
-                try model.scanSourceFolder(id: folder.id)
-            }
-            syncEditorFields()
-        } catch {
-            errorMessage = String(describing: error)
-        }
-    }
-
     private func chooseWorkingDirectory() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -752,30 +642,6 @@ struct ContentView: View {
     private func removeSelectedImage() {
         _ = model.removeSelectedImage()
         syncEditorFields()
-    }
-
-    private func scanSourceFolder(_ folder: SourceFolder) {
-        do {
-            try model.scanSourceFolder(id: folder.id)
-            syncEditorFields()
-        } catch {
-            errorMessage = String(describing: error)
-        }
-    }
-
-    private func scanAllSourceFolders() {
-        do {
-            for folder in model.workspace.sourceFolders {
-                try model.scanSourceFolder(id: folder.id)
-            }
-            syncEditorFields()
-        } catch {
-            errorMessage = String(describing: error)
-        }
-    }
-
-    private func removeSourceFolder(_ folder: SourceFolder) {
-        _ = model.removeSourceFolder(id: folder.id)
     }
 
     private func saveProvider() {
@@ -1129,6 +995,24 @@ struct ContentView: View {
         model.workspace.images.contains { image in
             image.generatedOutputs.contains { $0.status == .generated }
         }
+    }
+
+    private func locationPath(for image: ImageEntry) -> String {
+        URL(fileURLWithPath: image.sourcePath).deletingLastPathComponent().path
+    }
+
+    private func metadataSummary(for image: ImageEntry) -> String {
+        guard let metadata = model.imageMetadata(for: image) else {
+            return "Unavailable"
+        }
+
+        let modified = metadata.modifiedAt?.formatted(date: .abbreviated, time: .shortened) ?? "Unknown date"
+        let size = metadata.fileSizeBytes.map(formatByteCount) ?? "Unknown size"
+        return "\(modified) / \(size)"
+    }
+
+    private func formatByteCount(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private func datasetExportReportView(_ report: DatasetExportReport) -> some View {

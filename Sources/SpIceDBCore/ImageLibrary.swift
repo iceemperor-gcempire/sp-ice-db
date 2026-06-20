@@ -14,6 +14,20 @@ public protocol ImageFileStatusProviding {
     func status(forPath path: String) -> ImageFileStatus
 }
 
+public struct ImageFileMetadata: Equatable, Sendable {
+    public var modifiedAt: Date?
+    public var fileSizeBytes: Int64?
+
+    public init(modifiedAt: Date?, fileSizeBytes: Int64?) {
+        self.modifiedAt = modifiedAt
+        self.fileSizeBytes = fileSizeBytes
+    }
+}
+
+public protocol ImageFileMetadataProviding {
+    func metadata(forPath path: String) -> ImageFileMetadata?
+}
+
 public struct FileManagerImageFileStatusProvider: ImageFileStatusProviding {
     private let fileManager: FileManager
 
@@ -27,6 +41,25 @@ public struct FileManagerImageFileStatusProvider: ImageFileStatusProviding {
         }
 
         return fileManager.isReadableFile(atPath: path) ? .readable : .unreadable
+    }
+}
+
+public struct FileManagerImageFileMetadataProvider: ImageFileMetadataProviding {
+    private let fileManager: FileManager
+
+    public init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+    }
+
+    public func metadata(forPath path: String) -> ImageFileMetadata? {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: path) else {
+            return nil
+        }
+
+        return ImageFileMetadata(
+            modifiedAt: attributes[.modificationDate] as? Date,
+            fileSizeBytes: (attributes[.size] as? NSNumber)?.int64Value
+        )
     }
 }
 
@@ -75,4 +108,3 @@ public struct ImageLibrary {
         fileStatusProvider.status(forPath: entry.sourcePath)
     }
 }
-

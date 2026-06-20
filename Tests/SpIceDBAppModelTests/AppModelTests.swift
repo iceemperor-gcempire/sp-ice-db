@@ -711,6 +711,25 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.imageStatus(for: image), .unreadable)
     }
 
+    func testImageMetadataForEntryUsesInjectedProvider() {
+        let image = imageEntry(
+            id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
+            filename: "image001.png"
+        )
+        let metadata = ImageFileMetadata(
+            modifiedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            fileSizeBytes: 1024
+        )
+        let model = AppModel(
+            workspace: workspaceWithImages([image]),
+            imageFileMetadataProvider: StubImageFileMetadataProvider(metadataByPath: [
+                image.sourcePath: metadata
+            ])
+        )
+
+        XCTAssertEqual(model.imageMetadata(for: image), metadata)
+    }
+
     func testImageStatusSummaryCountsAllWorkspaceImages() {
         let readable = imageEntry(
             id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
@@ -1267,6 +1286,14 @@ private struct StubFileStatusProvider: ImageFileStatusProviding {
 
     func status(forPath path: String) -> ImageFileStatus {
         statuses[path] ?? .missing
+    }
+}
+
+private struct StubImageFileMetadataProvider: ImageFileMetadataProviding {
+    var metadataByPath: [String: ImageFileMetadata]
+
+    func metadata(forPath path: String) -> ImageFileMetadata? {
+        metadataByPath[path]
     }
 }
 

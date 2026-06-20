@@ -13,6 +13,7 @@ public final class AppModel {
     public var latestDatasetExportReport: DatasetExportReport?
 
     private let imageLibrary: ImageLibrary
+    private let imageFileMetadataProvider: any ImageFileMetadataProviding
     private let sourceFolderLibrary: SourceFolderLibrary
     private let sourceFolderScanner: any SourceFolderScanning
     private let imagePayloadReader: ImagePayloadReader
@@ -37,6 +38,7 @@ public final class AppModel {
         isGeneratingSelectedImage: Bool = false,
         idGenerator: @escaping () -> UUID = UUID.init,
         imageFileStatusProvider: ImageFileStatusProviding = FileManagerImageFileStatusProvider(),
+        imageFileMetadataProvider: any ImageFileMetadataProviding = FileManagerImageFileMetadataProvider(),
         imageFileReader: ImageFileReading = FileManagerImageFileReader(),
         sourceFolderScanner: any SourceFolderScanning = SourceFolderScanner(),
         aiClassificationProvider: any AIClassificationProviding = OpenAICompatibleAIClassificationProvider(),
@@ -62,6 +64,7 @@ public final class AppModel {
             idGenerator: idGenerator,
             fileStatusProvider: imageFileStatusProvider
         )
+        self.imageFileMetadataProvider = imageFileMetadataProvider
         self.sourceFolderLibrary = SourceFolderLibrary(idGenerator: idGenerator)
         self.sourceFolderScanner = sourceFolderScanner
         self.imagePayloadReader = ImagePayloadReader(fileReader: imageFileReader)
@@ -113,6 +116,10 @@ public final class AppModel {
 
     public func imageStatus(for image: ImageEntry) -> ImageFileStatus {
         imageLibrary.status(for: image)
+    }
+
+    public func imageMetadata(for image: ImageEntry) -> ImageFileMetadata? {
+        imageFileMetadataProvider.metadata(forPath: image.sourcePath)
     }
 
     public func newWorkspace(named name: String = "Untitled") {

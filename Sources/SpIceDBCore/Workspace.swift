@@ -137,7 +137,7 @@ public struct SourceFolder: Codable, Equatable, Sendable {
     }
 }
 
-public struct ImageEntry: Codable, Equatable {
+public struct ImageEntry: Codable, Equatable, Identifiable {
     public var id: UUID
     public var sourcePath: String
     public var displayName: String?
