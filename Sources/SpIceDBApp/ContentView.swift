@@ -7,6 +7,7 @@ import SpIceDBCore
 struct ContentView: View {
     @Bindable var model: AppModel
     @State private var imagePathInput = ""
+    @State private var sourceFolderRecursive = true
     @State private var workspaceNameInput = ""
     @State private var userSentence = ""
     @State private var userTags = ""
@@ -74,6 +75,12 @@ struct ContentView: View {
                     chooseImageFile()
                 } label: {
                     Label("Choose Image", systemImage: "photo")
+                }
+
+                Button {
+                    chooseSourceFolder()
+                } label: {
+                    Label("Add Source Folder", systemImage: "folder.badge.plus")
                 }
 
                 Button {
@@ -171,6 +178,10 @@ struct ContentView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 8)
 
+            sourceFolderSection
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
             List(selection: $model.selectedImageID) {
                 ForEach(model.workspace.images, id: \.id) { image in
                     HStack(spacing: 8) {
@@ -206,6 +217,93 @@ struct ContentView: View {
             Spacer()
         }
         .font(.caption)
+    }
+
+    private var sourceFolderSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Source Folders")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Toggle("Recursive", isOn: $sourceFolderRecursive)
+                    .font(.caption)
+                    .toggleStyle(.checkbox)
+
+                Button {
+                    chooseSourceFolder()
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .buttonStyle(.borderless)
+                .help("Add source folder")
+
+                Button {
+                    scanAllSourceFolders()
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.borderless)
+                .disabled(model.workspace.sourceFolders.isEmpty)
+                .help("Scan all source folders")
+            }
+
+            if model.workspace.sourceFolders.isEmpty {
+                Text("No source folders")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(model.workspace.sourceFolders, id: \.id) { folder in
+                        sourceFolderRow(folder)
+                    }
+                }
+            }
+        }
+    }
+
+    private func sourceFolderRow(_ folder: SourceFolder) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: folder.recursive ? "folder.fill.badge.gearshape" : "folder.fill")
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(folder.displayName ?? folder.path)
+                    .font(.caption)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(folder.path)
+                        .lineLimit(1)
+                    if let lastScannedAt = folder.lastScannedAt {
+                        Text(lastScannedAt, style: .relative)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                scanSourceFolder(folder)
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.borderless)
+            .help("Scan folder")
+
+            Button(role: .destructive) {
+                removeSourceFolder(folder)
+            } label: {
+                Image(systemName: "xmark.circle")
+            }
+            .buttonStyle(.borderless)
+            .help("Remove source folder")
+        }
+        .padding(.vertical, 3)
     }
 
     private var detail: some View {
@@ -611,6 +709,28 @@ struct ContentView: View {
         }
     }
 
+    private func chooseSourceFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose source folders to scan for image references."
+
+        guard panel.runModal() == .OK else {
+            return
+        }
+
+        do {
+            for url in panel.urls {
+                let folder = try model.addSourceFolder(path: url.path, recursive: sourceFolderRecursive)
+                try model.scanSourceFolder(id: folder.id)
+            }
+            syncEditorFields()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
     private func chooseWorkingDirectory() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -632,6 +752,30 @@ struct ContentView: View {
     private func removeSelectedImage() {
         _ = model.removeSelectedImage()
         syncEditorFields()
+    }
+
+    private func scanSourceFolder(_ folder: SourceFolder) {
+        do {
+            try model.scanSourceFolder(id: folder.id)
+            syncEditorFields()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    private func scanAllSourceFolders() {
+        do {
+            for folder in model.workspace.sourceFolders {
+                try model.scanSourceFolder(id: folder.id)
+            }
+            syncEditorFields()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    private func removeSourceFolder(_ folder: SourceFolder) {
+        _ = model.removeSourceFolder(id: folder.id)
     }
 
     private func saveProvider() {

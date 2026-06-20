@@ -50,6 +50,7 @@ The first implementation may define the data model before implementing generatio
 A workspace is a saved project file containing:
 
 - Workspace metadata.
+- Source folder references.
 - Source image entries.
 - Classification metadata.
 - AI provider configuration references.
@@ -78,6 +79,9 @@ The app must allow users to:
 
 - Add one or more image file paths.
 - Add image paths via file picker.
+- Register source folders that can be rescanned when the original image data changes.
+- Scan registered source folders for supported images.
+- Scan source folders recursively.
 - Remove image paths from the workspace.
 - Detect missing or moved files.
 - Display image previews when files are readable.
@@ -86,7 +90,6 @@ The app must allow users to:
 Future enhancement:
 
 - Support relative paths based on workspace location.
-- Support folder import and recursive scan.
 - Support file fingerprinting to help recover moved files.
 
 ### 4.3 Manual Classification Data
@@ -202,6 +205,7 @@ Suggested modules:
 - Create workspace model.
 - Save and load `.spicedb` JSON files.
 - Add and remove image paths.
+- Add and scan source folders.
 - Show image list and basic preview.
 - Edit user sentence and tags.
 
@@ -234,4 +238,3 @@ Suggested modules:
 - Should generated training images be copied into the working directory, generated directly there, or both?
 - Should AI classification support multimodal chat APIs only, or also specialized vision endpoints?
 - What exact caption formats are required by the user's Anima and SDXL workflows?
-

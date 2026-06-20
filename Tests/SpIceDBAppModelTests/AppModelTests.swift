@@ -246,6 +246,130 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.hasUnsavedChanges)
     }
 
+    func testAddSourceFolderStoresFolderAndMarksUnsavedChanges() throws {
+        let ids = DeterministicUUIDGenerator([
+            UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        ])
+        let model = AppModel(idGenerator: ids.next)
+
+        let folder = try model.addSourceFolder(path: "/tmp/source", recursive: true)
+
+        XCTAssertEqual(
+            folder,
+            SourceFolder(
+                id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
+                path: "/tmp/source",
+                displayName: "source",
+                recursive: true
+            )
+        )
+        XCTAssertEqual(model.workspace.sourceFolders, [folder])
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testAddingDuplicateSourceFolderDoesNotMarkUnsavedChanges() throws {
+        let folderID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let model = AppModel(
+            workspace: workspaceWithSourceFolders([
+                SourceFolder(id: folderID, path: "/tmp/source", displayName: "source", recursive: true)
+            ]),
+            hasUnsavedChanges: false
+        )
+
+        let folder = try model.addSourceFolder(path: "/tmp/source", recursive: false)
+
+        XCTAssertEqual(folder.id, folderID)
+        XCTAssertEqual(model.workspace.sourceFolders.count, 1)
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testScanSourceFolderAddsDiscoveredImagePathsSelectsLastImageAndMarksScanned() throws {
+        let folderID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let firstImageID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let secondImageID = UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!
+        let scannedAt = Date(timeIntervalSince1970: 1_800_000_600)
+        let ids = DeterministicUUIDGenerator([firstImageID, secondImageID])
+        let scanner = StubSourceFolderScanner(pathsByFolderID: [
+            folderID: [
+                "/tmp/source/a.png",
+                "/tmp/source/b.jpg"
+            ]
+        ])
+        let model = AppModel(
+            workspace: workspaceWithSourceFolders([
+                SourceFolder(id: folderID, path: "/tmp/source", displayName: "source", recursive: true)
+            ]),
+            hasUnsavedChanges: false,
+            idGenerator: ids.next,
+            sourceFolderScanner: scanner,
+            now: { scannedAt }
+        )
+
+        let entries = try model.scanSourceFolder(id: folderID)
+
+        XCTAssertEqual(entries.map(\.sourcePath), ["/tmp/source/a.png", "/tmp/source/b.jpg"])
+        XCTAssertEqual(model.workspace.images.map(\.sourcePath), ["/tmp/source/a.png", "/tmp/source/b.jpg"])
+        XCTAssertEqual(model.selectedImageID, secondImageID)
+        XCTAssertEqual(model.workspace.sourceFolders[0].lastScannedAt, scannedAt)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testScanSourceFolderReusesExistingImageEntriesAndStillUpdatesLastScannedAt() throws {
+        let folderID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let imageID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let scannedAt = Date(timeIntervalSince1970: 1_800_000_600)
+        let scanner = StubSourceFolderScanner(pathsByFolderID: [
+            folderID: ["/tmp/source/image001.png"]
+        ])
+        let model = AppModel(
+            workspace: WorkspaceDocument(
+                workspace: workspaceInfoValue(),
+                sourceFolders: [
+                    SourceFolder(id: folderID, path: "/tmp/source", displayName: "source", recursive: true)
+                ],
+                images: [
+                    imageEntry(id: imageID, filename: "image001.png")
+                ]
+            ),
+            selectedImageID: nil,
+            hasUnsavedChanges: false,
+            sourceFolderScanner: scanner,
+            now: { scannedAt }
+        )
+
+        let entries = try model.scanSourceFolder(id: folderID)
+
+        XCTAssertEqual(entries.map(\.id), [imageID])
+        XCTAssertEqual(model.workspace.images.map(\.id), [imageID])
+        XCTAssertEqual(model.selectedImageID, imageID)
+        XCTAssertEqual(model.workspace.sourceFolders[0].lastScannedAt, scannedAt)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testRemoveSourceFolderOnlyRemovesFolderReference() {
+        let folderID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let imageID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let model = AppModel(
+            workspace: WorkspaceDocument(
+                workspace: workspaceInfoValue(),
+                sourceFolders: [
+                    SourceFolder(id: folderID, path: "/tmp/source", displayName: "source", recursive: true)
+                ],
+                images: [
+                    imageEntry(id: imageID, filename: "image001.png")
+                ]
+            ),
+            hasUnsavedChanges: false
+        )
+
+        let removed = model.removeSourceFolder(id: folderID)
+
+        XCTAssertEqual(removed?.id, folderID)
+        XCTAssertTrue(model.workspace.sourceFolders.isEmpty)
+        XCTAssertEqual(model.workspace.images.map(\.id), [imageID])
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
     func testEditingSelectedImageUpdatesUserClassification() throws {
         let imageID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
         let model = AppModel(
@@ -1074,6 +1198,23 @@ private func workspaceInfo(name: String, workingDirectory: String? = nil) -> Wor
     )
 }
 
+private func workspaceInfoValue(name: String = "Dataset", workingDirectory: String? = nil) -> WorkspaceInfo {
+    WorkspaceInfo(
+        id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+        name: name,
+        createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+        updatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+        workingDirectory: workingDirectory
+    )
+}
+
+private func workspaceWithSourceFolders(_ sourceFolders: [SourceFolder]) -> WorkspaceDocument {
+    WorkspaceDocument(
+        workspace: workspaceInfoValue(),
+        sourceFolders: sourceFolders
+    )
+}
+
 private func workspaceWithImages(
     _ images: [ImageEntry],
     aiProviders: [AIProviderProfile] = [],
@@ -1191,6 +1332,14 @@ private final class StubImageGenerationProvider: ImageGenerationProviding, @unch
 
 private final class RunningStateProbe: @unchecked Sendable {
     var check: () -> Void = {}
+}
+
+private struct StubSourceFolderScanner: SourceFolderScanning {
+    var pathsByFolderID: [UUID: [String]]
+
+    func imagePaths(in folder: SourceFolder) throws -> [String] {
+        pathsByFolderID[folder.id] ?? []
+    }
 }
 
 @MainActor

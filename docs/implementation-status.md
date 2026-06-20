@@ -7,8 +7,8 @@ This document maps the original sp-ice-db goals to the current implementation.
 The initial core workflow is implemented:
 
 - Workspace files can be created, opened, saved, and saved-as using `.spicedb` JSON.
-- Workspace files store source image paths, user classification data, AI classification data, AI provider profiles, generation settings, generated output records, and working-directory information.
-- Users can add one or more image paths, remove image entries from the workspace, inspect readability status, and view readable image previews.
+- Workspace files store source folder references, source image paths, user classification data, AI classification data, AI provider profiles, generation settings, generated output records, and working-directory information.
+- Users can add one or more image paths, register source folders, scan source folders recursively, remove image entries from the workspace, inspect readability status, and view readable image previews.
 - Removing an image entry only unregisters it from the workspace. The original source image file is not deleted.
 - Users can edit sentence-style and tag-style user metadata for each image.
 - OpenAI-compatible AI provider profiles can be configured with base URL, model, API key reference, timeout, custom headers, and image-input support.
@@ -28,6 +28,7 @@ The initial core workflow is implemented:
 The automated test suite currently covers:
 
 - Workspace JSON round trip, load/save, unsupported schema rejection, and failed decode handling.
+- Source folder persistence, legacy workspace decoding, folder registration, duplicate handling, removal, scanning, and last-scanned tracking.
 - Image path add/remove behavior, duplicate handling, file status checks, and the source-file preservation invariant.
 - User and AI classification updates, AI promotion, OpenAI-compatible request building, response parsing, and client error handling.
 - AI provider profile add/update/remove behavior.
@@ -55,7 +56,6 @@ The following items are intentionally outside the first complete core workflow a
 
 - Store API keys in macOS Keychain instead of environment/API-key references only.
 - Support relative paths based on workspace location.
-- Add folder import and recursive image scanning.
 - Add drag-and-drop image import.
 - Add generated output preview grids and richer output review tools.
 - Add retry/failure queues for batch AI classification and image generation.

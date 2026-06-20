@@ -13,6 +13,8 @@ public final class AppModel {
     public var latestDatasetExportReport: DatasetExportReport?
 
     private let imageLibrary: ImageLibrary
+    private let sourceFolderLibrary: SourceFolderLibrary
+    private let sourceFolderScanner: any SourceFolderScanning
     private let imagePayloadReader: ImagePayloadReader
     private let classificationLibrary: ClassificationLibrary
     private let aiProviderLibrary: AIProviderLibrary
@@ -36,6 +38,7 @@ public final class AppModel {
         idGenerator: @escaping () -> UUID = UUID.init,
         imageFileStatusProvider: ImageFileStatusProviding = FileManagerImageFileStatusProvider(),
         imageFileReader: ImageFileReading = FileManagerImageFileReader(),
+        sourceFolderScanner: any SourceFolderScanning = SourceFolderScanner(),
         aiClassificationProvider: any AIClassificationProviding = OpenAICompatibleAIClassificationProvider(),
         imageGenerationProvider: any ImageGenerationProviding = UnavailableImageGenerationProvider(),
         imageGenerationProviderFactory: @escaping (AIProviderProfile) -> any ImageGenerationProviding = { provider in
@@ -59,6 +62,8 @@ public final class AppModel {
             idGenerator: idGenerator,
             fileStatusProvider: imageFileStatusProvider
         )
+        self.sourceFolderLibrary = SourceFolderLibrary(idGenerator: idGenerator)
+        self.sourceFolderScanner = sourceFolderScanner
         self.imagePayloadReader = ImagePayloadReader(fileReader: imageFileReader)
         self.classificationLibrary = ClassificationLibrary()
         self.aiProviderLibrary = AIProviderLibrary(idGenerator: idGenerator)
@@ -270,6 +275,52 @@ public final class AppModel {
             entries.append(try addImage(path: path))
         }
 
+        return entries
+    }
+
+    @discardableResult
+    public func addSourceFolder(path: String, recursive: Bool = true) throws -> SourceFolder {
+        let folderCount = workspace.sourceFolders.count
+        let folder = try sourceFolderLibrary.addSourceFolder(
+            path: path,
+            recursive: recursive,
+            to: &workspace
+        )
+        if workspace.sourceFolders.count != folderCount {
+            hasUnsavedChanges = true
+        }
+        return folder
+    }
+
+    @discardableResult
+    public func removeSourceFolder(id: UUID) -> SourceFolder? {
+        guard let removed = sourceFolderLibrary.removeSourceFolder(id: id, from: &workspace) else {
+            return nil
+        }
+
+        hasUnsavedChanges = true
+        return removed
+    }
+
+    @discardableResult
+    public func scanSourceFolder(id: UUID) throws -> [ImageEntry] {
+        guard let folder = workspace.sourceFolders.first(where: { $0.id == id }) else {
+            throw AppModelError.sourceFolderNotFound
+        }
+
+        let paths = try sourceFolderScanner.imagePaths(in: folder)
+        let imageCount = workspace.images.count
+        var entries: [ImageEntry] = []
+        for path in paths {
+            let entry = try imageLibrary.addImage(path: path, to: &workspace)
+            selectedImageID = entry.id
+            entries.append(entry)
+        }
+
+        sourceFolderLibrary.markScanned(folderID: id, at: now(), in: &workspace)
+        if workspace.images.count != imageCount || !entries.isEmpty {
+            hasUnsavedChanges = true
+        }
         return entries
     }
 
@@ -516,6 +567,7 @@ public enum AppModelError: Error, Equatable {
     case imageSelectionRequired
     case workspaceURLRequired
     case aiProviderNotFound
+    case sourceFolderNotFound
     case aiClassificationProviderUnavailable
     case imageGenerationProviderUnavailable
 }

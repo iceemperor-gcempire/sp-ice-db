@@ -40,6 +40,15 @@ JSON is suitable for the first version because it is easy to inspect, migrate, d
       "customHeaders": {}
     }
   ],
+  "sourceFolders": [
+    {
+      "id": "source-folder-uuid",
+      "path": "/Users/example/Pictures/source",
+      "displayName": "source",
+      "recursive": true,
+      "lastScannedAt": "2026-06-06T00:00:00Z"
+    }
+  ],
   "images": [
     {
       "id": "image-entry-uuid",
@@ -98,6 +107,22 @@ Directory where generated training images should be collected.
 ### `aiProviders[].apiKeyRef`
 
 Reference to a secret stored outside the workspace file. On macOS, this should point to a Keychain item or an app-managed secure profile.
+
+### `sourceFolders`
+
+Source folders are registered root directories that can be rescanned to discover image files by reference. They do not own or copy the original image files.
+
+### `sourceFolders[].path`
+
+Initial version stores the absolute folder path selected by the user.
+
+### `sourceFolders[].recursive`
+
+When true, scanning includes supported image files in nested folders below the source root.
+
+### `sourceFolders[].lastScannedAt`
+
+Optional timestamp for the most recent scan. This helps users understand whether a folder has been refreshed after external edits.
 
 ### `images[].sourcePath`
 
@@ -163,4 +188,3 @@ Future dataset export should support:
 - AI metadata only.
 - User metadata with AI fallback.
 - Validation reports for missing files or empty captions.
-

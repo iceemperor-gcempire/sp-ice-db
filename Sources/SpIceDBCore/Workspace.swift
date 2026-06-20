@@ -6,6 +6,7 @@ public struct WorkspaceDocument: Codable, Equatable {
     public var schemaVersion: Int
     public var workspace: WorkspaceInfo
     public var aiProviders: [AIProviderProfile]
+    public var sourceFolders: [SourceFolder]
     public var images: [ImageEntry]
     public var generationSettings: [GenerationSettings]
 
@@ -13,12 +14,14 @@ public struct WorkspaceDocument: Codable, Equatable {
         schemaVersion: Int = WorkspaceDocument.currentSchemaVersion,
         workspace: WorkspaceInfo,
         aiProviders: [AIProviderProfile] = [],
+        sourceFolders: [SourceFolder] = [],
         images: [ImageEntry] = [],
         generationSettings: [GenerationSettings] = []
     ) {
         self.schemaVersion = schemaVersion
         self.workspace = workspace
         self.aiProviders = aiProviders
+        self.sourceFolders = sourceFolders
         self.images = images
         self.generationSettings = generationSettings
     }
@@ -33,6 +36,35 @@ public struct WorkspaceDocument: Codable, Equatable {
                 workingDirectory: nil
             )
         )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case workspace
+        case aiProviders
+        case sourceFolders
+        case images
+        case generationSettings
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        workspace = try container.decode(WorkspaceInfo.self, forKey: .workspace)
+        aiProviders = try container.decodeIfPresent([AIProviderProfile].self, forKey: .aiProviders) ?? []
+        sourceFolders = try container.decodeIfPresent([SourceFolder].self, forKey: .sourceFolders) ?? []
+        images = try container.decodeIfPresent([ImageEntry].self, forKey: .images) ?? []
+        generationSettings = try container.decodeIfPresent([GenerationSettings].self, forKey: .generationSettings) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(workspace, forKey: .workspace)
+        try container.encode(aiProviders, forKey: .aiProviders)
+        try container.encode(sourceFolders, forKey: .sourceFolders)
+        try container.encode(images, forKey: .images)
+        try container.encode(generationSettings, forKey: .generationSettings)
     }
 }
 
@@ -80,6 +112,28 @@ public struct AIProviderProfile: Codable, Equatable, Sendable {
         self.supportsImageInput = supportsImageInput
         self.timeoutSeconds = timeoutSeconds
         self.customHeaders = customHeaders
+    }
+}
+
+public struct SourceFolder: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var path: String
+    public var displayName: String?
+    public var recursive: Bool
+    public var lastScannedAt: Date?
+
+    public init(
+        id: UUID,
+        path: String,
+        displayName: String?,
+        recursive: Bool,
+        lastScannedAt: Date? = nil
+    ) {
+        self.id = id
+        self.path = path
+        self.displayName = displayName
+        self.recursive = recursive
+        self.lastScannedAt = lastScannedAt
     }
 }
 

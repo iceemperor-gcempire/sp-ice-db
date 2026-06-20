@@ -23,6 +23,15 @@ final class WorkspaceTests: XCTestCase {
                     customHeaders: ["X-Test": "enabled"]
                 )
             ],
+            sourceFolders: [
+                SourceFolder(
+                    id: UUID(uuidString: "66666666-6666-6666-6666-666666666666")!,
+                    path: "/tmp/source-folders",
+                    displayName: "source-folders",
+                    recursive: true,
+                    lastScannedAt: Date(timeIntervalSince1970: 1_800_000_400)
+                )
+            ],
             images: [
                 ImageEntry(
                     id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
@@ -79,6 +88,29 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.workspace.name, "Untitled")
         XCTAssertTrue(workspace.images.isEmpty)
         XCTAssertTrue(workspace.aiProviders.isEmpty)
+        XCTAssertTrue(workspace.sourceFolders.isEmpty)
+    }
+
+    func testWorkspaceDecodesLegacyJSONWithoutSourceFolders() throws {
+        let json = """
+        {
+          "schemaVersion" : 1,
+          "workspace" : {
+            "id" : "11111111-1111-1111-1111-111111111111",
+            "name" : "Legacy",
+            "createdAt" : "2026-01-15T08:00:00Z",
+            "updatedAt" : "2026-01-15T08:00:00Z",
+            "workingDirectory" : null
+          },
+          "aiProviders" : [],
+          "images" : [],
+          "generationSettings" : []
+        }
+        """
+
+        let decoded = try WorkspaceJSONCodec.decode(Data(json.utf8))
+
+        XCTAssertEqual(decoded.workspace.name, "Legacy")
+        XCTAssertTrue(decoded.sourceFolders.isEmpty)
     }
 }
-
