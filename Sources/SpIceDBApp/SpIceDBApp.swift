@@ -9,6 +9,9 @@ struct SpIceDBApp: App {
         WindowGroup {
             ContentView(model: model)
                 .frame(minWidth: 980, minHeight: 620)
+                .onAppear {
+                    AppIconInstaller.install()
+                }
         }
         .commands {
             CommandGroup(replacing: .newItem) {

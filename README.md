@@ -42,6 +42,12 @@ Run the macOS app shell:
 swift run sp-ice-db
 ```
 
+Build and run the macOS app bundle with normal app menu / Dock identity:
+
+```sh
+open "$(scripts/build-app-bundle.sh)"
+```
+
 Development should follow a TDD loop:
 
 1. Add or update a focused test that describes the behavior.

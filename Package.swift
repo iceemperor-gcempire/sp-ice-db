@@ -40,6 +40,9 @@ let package = Package(
         .testTarget(
             name: "SpIceDBAppModelTests",
             dependencies: ["SpIceDBAppModel", "SpIceDBCore"]
+        ),
+        .testTarget(
+            name: "SpIceDBAppBundleTests"
         )
     ]
 )

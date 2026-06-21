@@ -22,6 +22,7 @@ The initial core workflow is implemented:
 - Generation settings presets can be created, updated, selected, and removed.
 - Dataset caption export writes `.txt` sidecar files next to generated image outputs using sentence or tag metadata from user metadata, AI metadata, or user metadata with AI fallback.
 - Dataset export reports missing generated files and missing captions.
+- The development build can be wrapped and launched as a macOS `.app` bundle with app metadata and Dock icon setup.
 
 ## Verification
 
@@ -37,6 +38,7 @@ The automated test suite currently covers:
 - Generation settings add/update/remove behavior.
 - Dataset caption export for sentence and tag formats, metadata source selection, missing file reports, and empty caption reports.
 - App model state transitions, dirty-state handling, running-state handling, and SwiftUI-facing workflows.
+- macOS app bundle metadata and local bundle-build script shape.
 
 Latest verification command:
 
@@ -47,7 +49,7 @@ swift test
 Latest result:
 
 ```text
-Executed 97 tests, with 0 failures.
+Executed 113 tests, with 0 failures.
 ```
 
 ## Follow-Up Candidates
