@@ -8,11 +8,12 @@ struct SpIceDBApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
-                .frame(minWidth: 980, minHeight: 620)
+                .frame(minWidth: 1080, minHeight: 640)
                 .onAppear {
                     AppIconInstaller.install()
                 }
         }
+        .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Workspace") {
