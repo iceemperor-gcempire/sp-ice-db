@@ -21,30 +21,32 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItemGroup {
                     Button {
-                        model.newWorkspace()
-                        syncWorkspaceFields()
-                        syncTaggingFields()
+                        newWorkspace()
                     } label: {
                         Label("New Workspace", systemImage: "doc.badge.plus")
                     }
+                    .help("Create a new workspace")
 
                     Button {
                         openWorkspace()
                     } label: {
                         Label("Open Workspace", systemImage: "folder")
                     }
+                    .help("Open a saved .spicedb workspace")
 
                     Button {
                         saveWorkspace()
                     } label: {
                         Label("Save Workspace", systemImage: "square.and.arrow.down")
                     }
+                    .help("Save the current workspace")
 
                     Button {
                         chooseImageFile()
                     } label: {
                         Label("Choose Image", systemImage: "photo")
                     }
+                    .help("Choose image files to add to the workspace")
 
                     Button {
                         removeSelectedImage()
@@ -52,8 +54,10 @@ struct ContentView: View {
                         Label("Remove From Workspace", systemImage: "minus.circle")
                     }
                     .disabled(model.selectedImageID == nil)
+                    .help("Remove the selected image entry from the workspace without deleting the source file")
                 }
             }
+            .focusedValue(\.appCommandSet, appCommandSet)
             .onChange(of: model.selectedImageID) {
                 syncTaggingFields()
             }
@@ -104,6 +108,18 @@ struct ContentView: View {
                     .frame(minWidth: 300, idealWidth: 340)
             }
         }
+    }
+
+    private var appCommandSet: AppCommandSet {
+        AppCommandSet(
+            newWorkspace: { newWorkspace() },
+            openWorkspace: { openWorkspace() },
+            saveWorkspace: { saveWorkspace() },
+            saveWorkspaceAs: { saveWorkspaceAs() },
+            chooseImage: { chooseImageFile() },
+            removeSelectedImage: { removeSelectedImage() },
+            canRemoveSelectedImage: model.selectedImageID != nil
+        )
     }
 
     private var imageListPane: some View {
@@ -361,6 +377,12 @@ struct ContentView: View {
 
     private func removeSelectedImage() {
         _ = model.removeSelectedImage()
+        syncTaggingFields()
+    }
+
+    private func newWorkspace() {
+        model.newWorkspace()
+        syncWorkspaceFields()
         syncTaggingFields()
     }
 

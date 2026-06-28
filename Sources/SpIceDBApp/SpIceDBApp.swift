@@ -15,20 +15,7 @@ struct SpIceDBApp: App {
         }
         .windowResizability(.contentMinSize)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("New Workspace") {
-                    model.newWorkspace()
-                }
-                .keyboardShortcut("n")
-            }
-
-            CommandMenu("Image") {
-                Button("Remove Selected Image From Workspace") {
-                    model.removeSelectedImage()
-                }
-                .keyboardShortcut(.delete)
-                .disabled(model.selectedImageID == nil)
-            }
+            SpIceDBCommands()
         }
     }
 }
