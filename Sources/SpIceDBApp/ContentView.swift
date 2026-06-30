@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var userTags = ""
     @State private var imageNotes = ""
     @State private var errorMessage: String?
+    @State private var isRenamingWorkspace = false
 
     private let workspaceContentType = UTType(filenameExtension: "spicedb") ?? .json
     private let imageContentTypes: [UTType] = [.image]
@@ -56,6 +57,10 @@ struct ContentView: View {
                     .disabled(model.selectedImageID == nil)
                     .help("Remove the selected image entry from the workspace without deleting the source file")
                 }
+
+                ToolbarItem(placement: .principal) {
+                    workspaceTitleControl
+                }
             }
             .focusedValue(\.appCommandSet, appCommandSet)
             .onChange(of: model.selectedImageID) {
@@ -72,30 +77,17 @@ struct ContentView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
+            .sheet(isPresented: $isRenamingWorkspace) {
+                renameWorkspaceSheet
+            }
     }
 
     private var mainView: some View {
         VStack(spacing: 0) {
-            HStack {
-                TextField("Workspace name", text: $workspaceNameInput)
-                    .font(.headline)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(saveWorkspaceName)
-
-                Spacer()
-
-                if model.hasUnsavedChanges {
-                    Circle()
-                        .fill(.orange)
-                        .frame(width: 8, height: 8)
-                        .accessibilityLabel("Unsaved changes")
-                }
-            }
-            .padding()
-
             imageStatusSummary
                 .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 10)
 
             HSplitView {
                 imageListPane
@@ -108,6 +100,64 @@ struct ContentView: View {
                     .frame(minWidth: 300, idealWidth: 340)
             }
         }
+    }
+
+    private var workspaceTitleControl: some View {
+        HStack(spacing: 8) {
+            VStack(spacing: 1) {
+                Text(model.workspace.workspace.name)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                Text("Workspace")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if model.hasUnsavedChanges {
+                Circle()
+                    .fill(.orange)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel("Unsaved changes")
+            }
+
+            Button {
+                beginRenameWorkspace()
+            } label: {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+            .help("Rename workspace")
+        }
+        .frame(maxWidth: 300)
+    }
+
+    private var renameWorkspaceSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Rename Workspace")
+                .font(.headline)
+
+            TextField("Workspace name", text: $workspaceNameInput)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(saveWorkspaceName)
+
+            HStack {
+                Spacer()
+
+                Button("Cancel") {
+                    cancelRenameWorkspace()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Rename") {
+                    saveWorkspaceName()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(workspaceNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding()
+        .frame(width: 360)
     }
 
     private var appCommandSet: AppCommandSet {
@@ -440,10 +490,21 @@ struct ContentView: View {
     private func saveWorkspaceName() {
         model.updateWorkspaceName(workspaceNameInput)
         syncWorkspaceFields()
+        isRenamingWorkspace = false
     }
 
     private func syncWorkspaceFields() {
         workspaceNameInput = model.workspace.workspace.name
+    }
+
+    private func beginRenameWorkspace() {
+        syncWorkspaceFields()
+        isRenamingWorkspace = true
+    }
+
+    private func cancelRenameWorkspace() {
+        syncWorkspaceFields()
+        isRenamingWorkspace = false
     }
 
     private func saveUserSentence() {
